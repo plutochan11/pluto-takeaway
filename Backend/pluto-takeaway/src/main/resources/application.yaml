@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: pluto-takeaway
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3307/pluto_takeaway}
+    username: pluto
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: true

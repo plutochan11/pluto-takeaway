@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:8080
+
+### Hello: 200, plain text
+GET {{baseUrl}}/api/hello
+
+### Shops: 200, JSON array
+GET {{baseUrl}}/api/shops
+Accept: application/json
+
+### Shop detail: 200
+GET {{baseUrl}}/api/shops/1
+Accept: application/json
+
+### Shop 1 menu: Chicken Rice; no shop 2 products
+GET {{baseUrl}}/api/shops/1/menu
+Accept: application/json
+
+### Shop 2 menu: Coffee and unavailable Lemon Tea; no shop 1 products
+GET {{baseUrl}}/api/shops/2/menu
+Accept: application/json
+
+### Unknown shop: 404 (provided this ID is absent)
+GET {{baseUrl}}/api/shops/999999/menu
+Accept: application/json
+
+### Invalid ID representation: 400
+GET {{baseUrl}}/api/shops/not-a-number/menu
+Accept: application/json
+
+### Requires manual menu-test-fixtures.sql in the CURRENT target DB: empty shop
+GET {{baseUrl}}/api/shops/9001/menu
+Accept: application/json
+
+### Requires manual fixtures: Drinks, Main Courses, Desserts; empty lists retained
+GET {{baseUrl}}/api/shops/9002/menu
+Accept: application/json

@@ -1,0 +1,210 @@
+ERROR 3819 (HY000) at line 41: Check constraint 'product_chk_1' is violated.
+--------------
+-- Manual learning script: seven statements below intentionally fail.
+--------------
+
+--------------
+-- Run in ONE connection, using the mysql client with --force so it continues
+--------------
+
+--------------
+-- after expected errors and reaches ROLLBACK. Do not run as a schema migration.
+--------------
+
+--------------
+-- Requires the existing shop/category/product tables and InnoDB transactions.
+--------------
+
+--------------
+-- Test rows are rolled back. AUTO_INCREMENT counters may still advance.
+--------------
+
+--------------
+SELECT VERSION() AS mysql_version, DATABASE() AS database_name
+--------------
+
+mysql_version	database_name
+8.4.8	pluto_takeaway
+--------------
+SET @shops_before = (SELECT COUNT(*) FROM shop)
+--------------
+
+--------------
+SET @categories_before = (SELECT COUNT(*) FROM category)
+--------------
+
+--------------
+SET @products_before = (SELECT COUNT(*) FROM product)
+--------------
+
+--------------
+START TRANSACTION
+--------------
+
+--------------
+INSERT INTO shop (name) VALUES ('__constraint_test_shop_A')
+--------------
+
+--------------
+SET @shop_a = LAST_INSERT_ID()
+--------------
+
+--------------
+INSERT INTO shop (name) VALUES ('__constraint_test_shop_B')
+--------------
+
+--------------
+SET @shop_b = LAST_INSERT_ID()
+--------------
+
+--------------
+INSERT INTO category (shop_id, name)
+VALUES (@shop_a, '__constraint_test_category_A')
+--------------
+
+--------------
+SET @category_a = LAST_INSERT_ID()
+--------------
+
+--------------
+INSERT INTO category (shop_id, name)
+VALUES (@shop_b, '__constraint_test_category_B')
+--------------
+
+--------------
+SET @category_b = LAST_INSERT_ID()
+--------------
+
+--------------
+SELECT 'T01 default shop status' AS test,
+       IF(status = 'CLOSED' AND id > 0, 'PASS', 'FAIL') AS result
+FROM shop WHERE id = @shop_a
+--------------
+
+test	result
+T01 default shop status	PASS
+--------------
+SELECT 'T02 default category sort order' AS test,
+       IF(sort_order = 0, 'PASS', 'FAIL') AS result
+FROM category WHERE id = @category_a
+--------------
+
+test	result
+T02 default category sort order	PASS
+--------------
+INSERT INTO product (shop_id, category_id, name, price)
+VALUES (@shop_a, @category_a, '__constraint_test_product', 58.00)
+--------------
+
+--------------
+SET @product_id = LAST_INSERT_ID()
+--------------
+
+--------------
+SELECT 'T03 default product status and valid price' AS test,
+       IF(status = 'UNAVAILABLE' AND price = 58.00, 'PASS', 'FAIL') AS result
+FROM product WHERE id = @product_id
+--------------
+
+test	result
+T03 default product status and valid price	PASS
+--------------
+SELECT 'T04 negative price: expect ERROR 3819' AS test
+--------------
+
+test
+T04 negative price: expect ERROR 3819
+--------------
+INSERT INTO product (shop_id, category_id, name, price)
+VALUES (@shop_a, @category_a, '__constraint_test_negative_price', -1.00)
+--------------
+
+--------------
+SELECT 'T05 invalid shop status: expect ERROR 3819' AS test
+--------------
+
+test
+T05 invalid shop status: expect ERROR 3819
+--------------
+INSERT INTO shop (name, status)
+VALUES ('__constraint_test_invalid_shop_status', 'UNKNOWN')
+--------------
+
+ERROR 3819 (HY000) at line 45: Check constraint 'shop_chk_1' is violated.
+--------------
+SELECT 'T06 NULL shop name: expect ERROR 1048' AS test
+--------------
+
+test
+T06 NULL shop name: expect ERROR 1048
+--------------
+INSERT INTO shop (name) VALUES (NULL)
+--------------
+
+ERROR 1048 (23000) at line 49: Column 'name' cannot be null
+ERROR 3819 (HY000) at line 52: Check constraint 'category_chk_1' is violated.
+ERROR 3819 (HY000) at line 56: Check constraint 'product_chk_2' is violated.
+--------------
+SELECT 'T07 negative category order: expect ERROR 3819' AS test
+--------------
+
+test
+T07 negative category order: expect ERROR 3819
+--------------
+INSERT INTO category (shop_id, name, sort_order)
+VALUES (@shop_a, '__constraint_test_negative_sort', -1)
+--------------
+
+--------------
+SELECT 'T08 invalid product status: expect ERROR 3819' AS test
+--------------
+
+test
+T08 invalid product status: expect ERROR 3819
+--------------
+INSERT INTO product (shop_id, category_id, name, price, status)
+VALUES (@shop_a, @category_a, '__constraint_test_invalid_product_status', 10.00, 'UNKNOWN')
+--------------
+
+--------------
+SELECT 'T09 cross-shop category: expect ERROR 1452' AS test
+--------------
+
+test
+T09 cross-shop category: expect ERROR 1452
+--------------
+INSERT INTO product (shop_id, category_id, name, price)
+VALUES (@shop_a, @category_b, '__constraint_test_cross_shop', 10.00)
+--------------
+
+ERROR 1452 (23000) at line 60: Cannot add or update a child row: a foreign key constraint fails (`pluto_takeaway`.`product`, CONSTRAINT `product_ibfk_1` FOREIGN KEY (`shop_id`, `category_id`) REFERENCES `category` (`shop_id`, `id`))
+--------------
+-- AUTO_INCREMENT produces positive IDs; -1 is unused in the current dataset.
+--------------
+
+--------------
+SELECT 'T10 nonexistent shop: expect ERROR 1452' AS test
+--------------
+
+test
+T10 nonexistent shop: expect ERROR 1452
+--------------
+INSERT INTO category (shop_id, name)
+VALUES (-1, '__constraint_test_missing_shop')
+--------------
+
+ERROR 1452 (23000) at line 65: Cannot add or update a child row: a foreign key constraint fails (`pluto_takeaway`.`category`, CONSTRAINT `category_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shop` (`id`))
+--------------
+ROLLBACK
+--------------
+
+--------------
+SELECT 'T11 rollback preserves original row counts' AS test,
+       IF((SELECT COUNT(*) FROM shop) = @shops_before
+          AND (SELECT COUNT(*) FROM category) = @categories_before
+          AND (SELECT COUNT(*) FROM product) = @products_before,
+          'PASS', 'FAIL') AS result
+--------------
+
+test	result
+T11 rollback preserves original row counts	PASS
