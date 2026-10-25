@@ -1,0 +1,9 @@
+spring:
+    datasource:
+        url: jdbc:mysql://127.0.0.1:1/unconfigured_test_database
+        username: test
+        password: test
+    flyway:
+        locations:
+            - classpath:db/migration
+            - classpath:test-data
