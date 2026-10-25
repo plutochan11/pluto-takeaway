@@ -3,12 +3,12 @@
 | Field                  | Value                                                                                     |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
 | Version                | 1.0                                                                                       |
-| Created / last updated | 19 October 2026                                                                           |
+| Created / last updated | Created 19 October 2026; updated 25 October 2026 |
 | Owner                  | Pluto                                                                                     |
 | Document status        | Baseline execution plan; update as work is completed                                      |
 | Requirements baseline  | [Product Scope and Requirements v0.3](./Pluto%20Takeaway%20Scope%20%26%20Requirements.md) |
-| Current milestone      | M1 — application foundation and public shop menus                                         |
-| Implementation status  | Not started; no application code or test evidence found in the current folder             |
+| Current milestone | M2 — identity and ownership boundaries |
+| Implementation status | M1 completed 25 October 2026; M2 design next |
 
 ## 1. Target and purpose
 
@@ -77,7 +77,7 @@ Use the scope for **what and why**, this plan for **sequence and completion**, a
 
 | Milestone | Demonstrable outcome                                           | Depends on     | Status                                              | Completed |
 | --------- | -------------------------------------------------------------- | -------------- | --------------------------------------------------- | --------- |
-| M1        | Database-backed shop list and isolated shop menus              | Existing scope | In progress: implemented; release checks pending | —         |
+| M1 | Database-backed shop list and isolated shop menus | Existing scope | Done | 25 October 2026 |
 | M2        | Customer/admin identity and enforced ownership boundaries      | M1             | Not started                                         | —         |
 | M3        | Administrators maintain menus and configurable meals           | M2             | Not started                                         | —         |
 | M4        | Persistent multi-shop baskets with valid configurations        | M3             | Not started                                         | —         |
@@ -94,12 +94,12 @@ Use the scope for **what and why**, this plan for **sequence and completion**, a
 
 ### Tasks, in execution order
 
-- [ ] **M1.1 — Create the application foundation.** Check the installed JDK and database tooling; choose and record the JDK, Spring Boot and MySQL versions and one build tool. Create the Spring Boot project inside `Backend/` with web, validation, Spring Data JPA, MySQL, migration and test support. Include the build wrapper. Initialise a project-root Git repository if absent, add an appropriate `.gitignore`, and exclude build output, IDE-local files and secrets. Put database settings behind environment variables and supply a sample configuration with placeholders. Start the application and document the exact command in the root `README.md`.
+- [x] **M1.1 — Create the application foundation.** Check the installed JDK and database tooling; choose and record the JDK, Spring Boot and MySQL versions and one build tool. Create the Spring Boot project inside `Backend/` with web, validation, Spring Data JPA, MySQL, migration and test support. Include the build wrapper. Initialise a project-root Git repository if absent, add an appropriate `.gitignore`, and exclude build output, IDE-local files and secrets. Put database settings behind environment variables and supply a sample configuration with placeholders. Start the application and document the exact command in the root `README.md`.
 - [x] **M1.2 — Draw the minimum data model.** In `Docs/Data Model/Data Model.md`, define `Shop`, `Category` and `Product`, including primary keys, ownership, name, availability/status and product price. Give categories and products explicit shop ownership. State how the database or validated write path prevents a product from referencing another shop's category. Choose exact decimal money storage and document its scale; do not use floating-point price arithmetic. Include a small relationship diagram and explain every foreign key.
 - [x] **M1.3 — Make the database reproducible.** Add the first schema migration under `Backend/pluto-takeaway/src/main/resources/db/migration/`. Add a separate development/test seed mechanism containing shops A and B, categories and distinguishable products for both, including an unavailable product. Document creation of an empty local database, migration and seed commands. Run the setup on an empty database and inspect the resulting rows. Keep sample data out of an assumed production startup path.
 - [x] **M1.4 — Specify the first two APIs.** In `Docs/API Contract.md`, define proposed routes `GET /api/shops` and `GET /api/shops/{shopId}/menu`. Include concrete JSON examples, ID and money representation, shop status, category/product nesting, ordering, empty-menu behaviour and unknown-shop errors. Decide whether unavailable products are omitted or shown as unavailable. Do not include hidden products accidentally. Treat route names here as proposals until recorded in the contract.
-- [ ] **M1.5 — Implement one complete read path.** Write shop-scoped Spring Data JPA repository queries; implement the service and controller; return response DTOs rather than database entities. Use the same documented error shape for invalid input and an unknown shop. Fetch actual database rows, rather than returning a hardcoded list. Read through the complete controller → service → repository → Hibernate/SQL → DTO path.
-- [ ] **M1.6 — Verify and record the first slice.** Add integration checks using a migration-created test database: two shops returned; A menu contains only A products; B menu contains only B products; an unknown shop returns the agreed error; a known empty shop has the documented response; unavailable items follow the contract. Save sample requests and results in `Docs/Demo Guide.md` and record the command and actual result in the evidence log.
+- [x] **M1.5 — Implement one complete read path.** Write shop-scoped Spring Data JPA repository queries; implement the service and controller; return response DTOs rather than database entities. Verify HTTP 400/404 status behaviour; a custom uniform error body is deferred to M2 authentication/error handling. The present API contract documents framework-default error bodies. Fetch actual database rows, rather than returning a hardcoded list. Read through the complete controller → service → repository → Hibernate/SQL → DTO path.
+- [x] **M1.6 — Verify and record the first slice.** Add integration checks using a migration-created test database: two shops returned; A menu contains only A products; B menu contains only B products; an unknown shop returns the agreed error; a known empty shop has the documented response; unavailable items follow the contract. Save sample requests and results in `Docs/Demo Guide.md` and record the command and actual result in the evidence log.
 
 ### Completion gate
 
@@ -306,10 +306,17 @@ Copy a row for each completed task or milestone. Record exact commands/results r
 
 ### What to do next
 
-1. Read the new README/API contract and try the saved `Docs/requests.http` requests.
-2. Add automated API integration coverage against a dedicated migration-created test database.
-3. Verify the documented fresh setup and HTTP status/query-count expectations with saved results.
-4. Initialise the project-root Git repository and make a reviewed initial commit.
-5. Reconcile remaining M1 tasks before starting M2.
+1. Review the M1 completion documentation and save it in a separate documentation commit.
+2. Begin M2.1: agree authentication scope, account provisioning and session/token policy before implementing security.
+3. Write the M2 API contract and account data model, then implement and verify ownership boundaries.
 
-Progress on 22 October 2026: public list/detail/menu APIs use Spring Data JPA/Hibernate. The developer verified menus and empty/ordering fixtures manually, then ran Flyway V1/V2 on `pluto_takeaway_m1` and confirmed no migration was required on restart. M1.2–M1.4 outputs exist; M1.1, M1.5 and M1.6 retain unchecked items for Git/setup, the error contract, and automated integration evidence. See `Docs/Demo Guide.md` for provenance and limits. M1 is not yet complete.
+M1 completion evidence, 25 October 2026:
+
+- Public shop list/detail/menu endpoints implemented using JPA, Hibernate and DTOs.
+- Flyway V1 creates the schema; dev V2 and test V2 are selected independently by profile.
+- Agent independently ran the eight-test suite on 24 October: 8 tests, 0 failures, 0 errors. The later strengthened assertions were also rerun successfully before the Git exercise.
+- Developer reports that a fresh clone from GitHub passes the full `mvn test` suite: 8 tests, 0 failures, 0 errors. This validates committed sources against a fresh Testcontainers database, not a completely uncached machine.
+- Git commits `c47855d` and `4df9f85` record implementation and tests; remote tracking was observed in the local repository. No new Git mutations were performed for this documentation update.
+- Browser startup and Flyway restart were previously verified by the developer. A complete independent replay of every manual README instruction is not claimed.
+
+Scope refinement: M1 accepts the documented Spring Boot default error representation and verifies HTTP 400/404. A stable custom error DTO is deferred to M2 so authentication, authorisation and application errors can be designed together. Status behaviour remains required and tested. Query-count logs were observed but are not enforced by an automated performance assertion.

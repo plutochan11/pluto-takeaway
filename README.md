@@ -107,9 +107,17 @@ Restart the backend. V1/V2 should remain recorded once each and the seed should 
 
 ## Tests and verification status
 
-From `Backend/pluto-takeaway`, with `DB_URL`, `DB_PASSWORD` and `SPRING_PROFILES_ACTIVE=dev` supplied, `mvn test` runs the current test sources. The generated context-load test is not a complete endpoint integration suite and can connect to the configured database. Use a dedicated test target for automated database tests once that suite is introduced.
+From `Backend/pluto-takeaway`, with Java 21, Maven and Docker Desktop available:
 
-The developer reports successful browser checks and a successful Flyway restart. Earlier constraint tests were executed against the original exercise database with recorded output. The documented fresh setup has not yet been independently rerun end to end, and automated M1 API integration coverage is pending. See [Demo Guide](./Docs/Demo%20Guide.md) for evidence and remaining checks.
+```bash
+mvn test
+```
+
+The test class activates `test`, imports a Spring-managed MySQL Testcontainer and uses MockMvc against real controllers/services/repositories. Service connection details select an independent container; no Compose startup, dev `.env` or `DB_PASSWORD` is required for tests. Flyway applies production V1 plus the test-only V2 fixture migration. Eight tests cover context startup, shop ordering, both menus and shop isolation, unavailable products, empty menus/categories, category ordering, HTTP 404 and HTTP 400. Tests do not start a listening Tomcat server.
+
+On 24 October 2026 the agent independently ran the suite successfully. On 25 October the developer reported the full `mvn test` suite also passed from a fresh GitHub clone: 8 tests, 0 failures, 0 errors. Maven caches may be reused; this is not a completely clean-machine certification. Manual application startup and Flyway restart were separately verified by the developer. See [Demo Guide](./Docs/Demo%20Guide.md) for provenance and limits.
+
+M1 public browsing is complete. Authentication and shop-scoped management are the next milestone. A uniform custom error response will be designed in M2; M1 retains framework-default error bodies with tested status codes.
 
 ## Stop and resume
 

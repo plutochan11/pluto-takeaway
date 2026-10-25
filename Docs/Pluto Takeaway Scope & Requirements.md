@@ -4,11 +4,11 @@
 | Field | Value |
 |---|---|
 | Document version | 0.4 |
-| Last updated | 22 October 2026 |
+| Last updated | 25 October 2026 |
 | Document owner | Pluto |
 | Status | Working specification; confirmed decisions and proposals distinguished below |
 | Intended audience | Project author, future maintainers and technical reviewers |
-| Implementation status | M1 public browsing and Flyway migrations implemented; manual verification reported; automated API integration coverage pending |
+| Implementation status | M1 public browsing complete; eight database-backed integration tests pass; M2 identity/ownership design next |
 
 ## 1. Purpose and background
 
