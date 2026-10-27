@@ -288,6 +288,7 @@ Existing implementation choices are references, not requirements to reproduce ol
 | DEC-09 | 19 October 2026 | Maintain the scope document in English; confirmed | Make objectives, rules and reasons understandable to future readers |
 | DEC-10 | 22 October 2026 | Use Spring Data JPA/Hibernate; confirmed in implementation | Align with the author's other project; retain explicit SQL schema constraints and Flyway migrations |
 | DEC-11 | 22 October 2026 | M1 menu displays unavailable products with status; implemented | Preserve menu visibility; later checkout must independently reject unavailable selections |
+| DEC-12 | 25 October 2026 | Use server-side Session authentication for M2; confirmed | Focus on authentication, authorisation and shop ownership; lifecycle and API defaults documented for implementation review in ADR-001 |
 
 ## 13. Open decisions and next steps
 
