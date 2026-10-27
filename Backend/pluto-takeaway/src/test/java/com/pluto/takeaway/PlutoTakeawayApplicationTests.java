@@ -2,15 +2,21 @@ package com.pluto.takeaway;
 
 import com.pluto.takeaway.entity.UserAccount;
 import com.pluto.takeaway.repository.UserAccountRepository;
+import com.pluto.takeaway.security.AccountUserDetailsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -27,6 +33,9 @@ class PlutoTakeawayApplicationTests {
 
 	@Autowired
 	private UserAccountRepository userAccountRepository;
+
+	@Autowired
+	private AccountUserDetailsService accountUserDetailsService;
 
 	@Test
 	void shouldReturnShopOneMenu() throws Exception {
@@ -150,6 +159,31 @@ class PlutoTakeawayApplicationTests {
 			  .findByUsername(unknownUsername)
 			  .isEmpty()
 		).isTrue();
+	}
+
+	@Test
+	void shouldLoadAdminAsUserDetails() {
+
+		String username = "admin_a";
+		UserDetails userDetails = accountUserDetailsService.loadUserByUsername(username);
+
+		assertThat(userDetails.getUsername())
+			  .isEqualTo(username);
+		assertThat(userDetails.isEnabled())
+			  .isTrue();
+		assertThat(userDetails.getAuthorities())
+			  .extracting(GrantedAuthority::getAuthority)
+			  .containsExactly("ROLE_SHOP_ADMIN");
+	}
+
+	@Test
+	void shouldThrowForUnknownSecurityUser() {
+
+		String unknownUsername = "unknown_username";
+
+		assertThatThrownBy(() ->
+			  accountUserDetailsService.loadUserByUsername(unknownUsername)
+		).isInstanceOf(UsernameNotFoundException.class);
 	}
 
 	@Test
