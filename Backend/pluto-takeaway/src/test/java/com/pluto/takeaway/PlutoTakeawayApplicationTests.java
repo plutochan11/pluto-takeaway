@@ -187,6 +187,23 @@ class PlutoTakeawayApplicationTests {
 	}
 
 	@Test
+	void shouldExposeCsrfToken() throws Exception {
+
+		mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.headerName").isNotEmpty())
+			  .andExpect(jsonPath("$.parameterName").isNotEmpty())
+			  .andExpect(jsonPath("$.token").isNotEmpty());
+	}
+
+	@Test
+	void shouldRequireAuthenticationForCurrentUser() throws Exception {
+
+		mockMvc.perform(get("/api/auth/me"))
+			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
 	void contextLoads() {
 	}
 
