@@ -15,12 +15,19 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import com.pluto.takeaway.dto.CsrfResponse;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -37,6 +44,9 @@ class PlutoTakeawayApplicationTests {
 	@Autowired
 	private AccountUserDetailsService accountUserDetailsService;
 
+	@Autowired
+	private JsonMapper jsonMapper;
+
 	@Test
 	void shouldReturnShopOneMenu() throws Exception {
 		mockMvc.perform(get("/api/shops/1/menu"))
@@ -48,7 +58,7 @@ class PlutoTakeawayApplicationTests {
 			  )
 			  .andExpect(
 				    jsonPath("$.categories[0].products[0].name")
-					      .value("Chicken Rice")
+						.value("Chicken Rice")
 			  );
 	}
 
@@ -140,7 +150,7 @@ class PlutoTakeawayApplicationTests {
 	void shouldLoadCustomerWithoutShop() throws Exception {
 
 		String username = "customer_a";
-		String expectRole =  "CUSTOMER";
+		String expectRole = "CUSTOMER";
 		Long expectShopId = null;
 
 		UserAccount returnedUserAccount = userAccountRepository.findByUsername(username)
@@ -201,6 +211,210 @@ class PlutoTakeawayApplicationTests {
 
 		mockMvc.perform(get("/api/auth/me"))
 			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldReturnCurrentUser() throws Exception {
+
+		// Request for CSRF Token
+		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse csrf = jsonMapper.readValue(
+			  csrfResult.getResponse().getContentAsString(),
+			  CsrfResponse.class
+		);
+
+		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
+
+		assertThat(session).isNotNull();
+
+		// Log in with CSRF Token
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "admin_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("admin_a"))
+			  .andExpect(jsonPath("$.role").value("SHOP_ADMIN"))
+			  .andExpect(jsonPath("$.shopId").value(1L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		MockHttpSession authenticatedSession = (MockHttpSession) loginResult.getRequest().getSession(false);
+
+		assertThat(authenticatedSession).isNotNull();
+
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("admin_a"))
+			  .andExpect(jsonPath("$.role").value("SHOP_ADMIN"))
+			  .andExpect(jsonPath("$.shopId").value(1L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath());
+	}
+
+	@Test
+	void shouldRejectWrongPassword() throws Exception {
+
+		// Request for CSRF Token
+		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse csrf = jsonMapper.readValue(
+			  csrfResult.getResponse().getContentAsString(),
+			  CsrfResponse.class
+		);
+
+		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
+
+		assertThat(session).isNotNull();
+
+		// Log in with wrong password
+		mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "admin_a")
+						.param("password", "wrong_password")
+			  )
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+
+		// Get current user info without login
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(session)
+			  )
+			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldRejectLoginWithoutCsrfToken() throws Exception {
+
+		// Request for CSRF Token
+		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		// Get session
+		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
+
+		assertThat(session).isNotNull();
+
+		// Log in without CSRF Token
+		mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "admin_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isForbidden());
+
+		// Get current user info without login
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(session)
+			  )
+			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldRejectLoginWithInvalidCsrfToken() throws Exception {
+
+		// Request for CSRF Token
+		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		// Get CSRF info
+		CsrfResponse csrf = jsonMapper.readValue(
+			  csrfResult.getResponse().getContentAsString(),
+			  CsrfResponse.class
+		);
+
+		// Get session
+		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
+
+		assertThat(session).isNotNull();
+
+		// Log in with wrong CSRF Token
+		mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), "wrong-csrf-token")
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "admin_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isForbidden());
+
+		// Get current user info
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(session)
+			  )
+			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldLoginCustomerWithoutShop() throws Exception {
+
+		// Request for CSRF Token
+		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		// Get CSRF info
+		CsrfResponse csrf = jsonMapper.readValue(
+			  csrfResult.getResponse().getContentAsString(),
+			  CsrfResponse.class
+		);
+
+		// Get session info
+		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
+
+		assertThat(session).isNotNull();
+
+		// Log in with CSRF Token
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "customer_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("customer_a"))
+			  .andExpect(jsonPath("$.role").value("CUSTOMER"))
+			  .andExpect(jsonPath("$.shopId").value(nullValue()))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		MockHttpSession authenticatedSession = (MockHttpSession) loginResult.getRequest().getSession(false);
+
+		assertThat(authenticatedSession).isNotNull();
+
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("customer_a"))
+			  .andExpect(jsonPath("$.role").value("CUSTOMER"))
+			  .andExpect(jsonPath("$.shopId").value(nullValue()))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath());
 	}
 
 	@Test
