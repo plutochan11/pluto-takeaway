@@ -35,13 +35,13 @@ public class SecurityConfig {
 				    .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 				    .requestMatchers(
 						HttpMethod.GET,
-					      "/api/hello",
-					      "/api/shops",
-					      "/api/shops/*",
-					      "/api/shops/*/menu",
-					      "/api/auth/csrf"
-				  ).permitAll()
-				  .anyRequest().authenticated()
+						"/api/hello",
+						"/api/shops",
+						"/api/shops/*",
+						"/api/shops/*/menu",
+						"/api/auth/csrf"
+				    ).permitAll()
+				    .anyRequest().authenticated()
 			  )
 			  .httpBasic(AbstractHttpConfigurer::disable)
 //			  .formLogin(AbstractHttpConfigurer::disable)
@@ -50,7 +50,7 @@ public class SecurityConfig {
 				    .loginProcessingUrl("/api/auth/login")
 				    .successHandler((request, response, authentication) -> {
 					    CurrentUserResponse currentUser =
-						      authService.getCurrentUser(authentication.getName());
+							authService.getCurrentUser(authentication.getName());
 
 					    response.setStatus(HttpServletResponse.SC_OK);
 					    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -65,20 +65,27 @@ public class SecurityConfig {
 
 					    jsonMapper.writeValue(
 							response.getWriter(),
-						      new ApiErrorResponse(
+							new ApiErrorResponse(
 								  "INVALID_CREDENTIALS",
-							        "Invalid username or password"
-						      )
+								  "Invalid username or password"
+							)
 					    );
 				    })
 				    .permitAll()
 			  )
+			  .logout(logout -> logout
+				    .logoutUrl("/api/auth/logout")
+				    .logoutSuccessHandler(
+						(request, response, authentication) ->
+							  response.setStatus(HttpServletResponse.SC_NO_CONTENT)
+				    )
+			  )
 			  .exceptionHandling(errors -> errors
 				    .authenticationEntryPoint(
-					      (request, response, exception) ->
-						        response.setStatus(
-							          HttpServletResponse.SC_UNAUTHORIZED
-						        )
+						(request, response, exception) ->
+							  response.setStatus(
+								    HttpServletResponse.SC_UNAUTHORIZED
+							  )
 				    )
 			  );
 

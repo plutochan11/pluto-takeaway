@@ -3,6 +3,7 @@ package com.pluto.takeaway;
 import com.pluto.takeaway.entity.UserAccount;
 import com.pluto.takeaway.repository.UserAccountRepository;
 import com.pluto.takeaway.security.AccountUserDetailsService;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +21,8 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.json.JsonMapper;
+
+import java.io.UnsupportedEncodingException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -217,46 +220,40 @@ class PlutoTakeawayApplicationTests {
 	void shouldReturnCurrentUser() throws Exception {
 
 		// Request for CSRF Token
-		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
-			  .andExpect(status().isOk())
-			  .andReturn();
+		MvcResult csrfResult = getCsrfResult();
 
-		CsrfResponse csrf = jsonMapper.readValue(
-			  csrfResult.getResponse().getContentAsString(),
-			  CsrfResponse.class
-		);
+		CsrfResponse csrf = getCsrfContent(csrfResult);
 
-		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
-
-		assertThat(session).isNotNull();
+		MockHttpSession session = getMockHttpSession(csrfResult);
 
 		// Log in with CSRF Token
+		String username = "admin_a";
+		String password = "password";
+		String role = "SHOP_ADMIN";
 		MvcResult loginResult = mockMvc.perform(
 				    post("/api/auth/login")
 						.session(session)
 						.header(csrf.headerName(), csrf.token())
 						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
-						.param("username", "admin_a")
-						.param("password", "password")
+						.param("username", username)
+						.param(password, password)
 			  )
 			  .andExpect(status().isOk())
-			  .andExpect(jsonPath("$.username").value("admin_a"))
-			  .andExpect(jsonPath("$.role").value("SHOP_ADMIN"))
+			  .andExpect(jsonPath("$.username").value(username))
+			  .andExpect(jsonPath("$.role").value(role))
 			  .andExpect(jsonPath("$.shopId").value(1L))
 			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
 			  .andReturn();
 
-		MockHttpSession authenticatedSession = (MockHttpSession) loginResult.getRequest().getSession(false);
-
-		assertThat(authenticatedSession).isNotNull();
+		MockHttpSession authenticatedSession = getMockHttpSession(loginResult);
 
 		mockMvc.perform(
 				    get("/api/auth/me")
 						.session(authenticatedSession)
 			  )
 			  .andExpect(status().isOk())
-			  .andExpect(jsonPath("$.username").value("admin_a"))
-			  .andExpect(jsonPath("$.role").value("SHOP_ADMIN"))
+			  .andExpect(jsonPath("$.username").value(username))
+			  .andExpect(jsonPath("$.role").value(role))
 			  .andExpect(jsonPath("$.shopId").value(1L))
 			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath());
 	}
@@ -265,18 +262,11 @@ class PlutoTakeawayApplicationTests {
 	void shouldRejectWrongPassword() throws Exception {
 
 		// Request for CSRF Token
-		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
-			  .andExpect(status().isOk())
-			  .andReturn();
+		MvcResult csrfResult = getCsrfResult();
 
-		CsrfResponse csrf = jsonMapper.readValue(
-			  csrfResult.getResponse().getContentAsString(),
-			  CsrfResponse.class
-		);
+		CsrfResponse csrf = getCsrfContent(csrfResult);
 
-		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
-
-		assertThat(session).isNotNull();
+		MockHttpSession session = getMockHttpSession(csrfResult);
 
 		// Log in with wrong password
 		mockMvc.perform(
@@ -302,14 +292,10 @@ class PlutoTakeawayApplicationTests {
 	void shouldRejectLoginWithoutCsrfToken() throws Exception {
 
 		// Request for CSRF Token
-		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
-			  .andExpect(status().isOk())
-			  .andReturn();
+		MvcResult csrfResult = getCsrfResult();
 
 		// Get session
-		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
-
-		assertThat(session).isNotNull();
+		MockHttpSession session = getMockHttpSession(csrfResult);
 
 		// Log in without CSRF Token
 		mockMvc.perform(
@@ -333,20 +319,13 @@ class PlutoTakeawayApplicationTests {
 	void shouldRejectLoginWithInvalidCsrfToken() throws Exception {
 
 		// Request for CSRF Token
-		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
-			  .andExpect(status().isOk())
-			  .andReturn();
+		MvcResult csrfResult = getCsrfResult();
 
 		// Get CSRF info
-		CsrfResponse csrf = jsonMapper.readValue(
-			  csrfResult.getResponse().getContentAsString(),
-			  CsrfResponse.class
-		);
+		CsrfResponse csrf = getCsrfContent(csrfResult);
 
 		// Get session
-		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
-
-		assertThat(session).isNotNull();
+		MockHttpSession session = getMockHttpSession(csrfResult);
 
 		// Log in with wrong CSRF Token
 		mockMvc.perform(
@@ -371,20 +350,13 @@ class PlutoTakeawayApplicationTests {
 	void shouldLoginCustomerWithoutShop() throws Exception {
 
 		// Request for CSRF Token
-		MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
-			  .andExpect(status().isOk())
-			  .andReturn();
+		MvcResult csrfResult = getCsrfResult();
 
 		// Get CSRF info
-		CsrfResponse csrf = jsonMapper.readValue(
-			  csrfResult.getResponse().getContentAsString(),
-			  CsrfResponse.class
-		);
+		CsrfResponse csrf = getCsrfContent(csrfResult);
 
 		// Get session info
-		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
-
-		assertThat(session).isNotNull();
+		MockHttpSession session = getMockHttpSession(csrfResult);
 
 		// Log in with CSRF Token
 		MvcResult loginResult = mockMvc.perform(
@@ -402,9 +374,7 @@ class PlutoTakeawayApplicationTests {
 			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
 			  .andReturn();
 
-		MockHttpSession authenticatedSession = (MockHttpSession) loginResult.getRequest().getSession(false);
-
-		assertThat(authenticatedSession).isNotNull();
+		MockHttpSession authenticatedSession = getMockHttpSession(loginResult);
 
 		mockMvc.perform(
 				    get("/api/auth/me")
@@ -418,7 +388,138 @@ class PlutoTakeawayApplicationTests {
 	}
 
 	@Test
+	void shouldLogoutAndInvalidateSession() throws Exception {
+
+		// Get CSRF info
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrf = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		// Log in with CSRF Token
+		String username = "admin_a";
+		String password = "password";
+		String role = "SHOP_ADMIN";
+
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", username)
+						.param("password", password)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value(username))
+			  .andExpect(jsonPath("$.role").value(role))
+			  .andExpect(jsonPath("$.shopId").value(1L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		MockHttpSession authenticatedSession = getMockHttpSession(loginResult);
+
+		// Get fresh CSRF Token
+		MvcResult csrfAfterLogin = mockMvc.perform(
+				    get("/api/auth/csrf")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse logoutCsrf = jsonMapper.readValue(
+			  csrfAfterLogin.getResponse().getContentAsString(),
+			  CsrfResponse.class
+		);
+
+		mockMvc.perform(
+				    post("/api/auth/logout")
+						.session(authenticatedSession)
+						.header(logoutCsrf.headerName(), logoutCsrf.token())
+			  )
+			  .andExpect(status().isNoContent());
+
+		assertThat(authenticatedSession.isInvalid()).isTrue();
+
+		mockMvc.perform(get("/api/auth/me"))
+			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldRejectLogoutWithoutCsrfToken() throws Exception {
+
+		// Get CSRF info
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrf = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		// Log in with CSRF Token
+		String username = "admin_a";
+		String password = "password";
+		String role = "SHOP_ADMIN";
+
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", username)
+						.param("password", password)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value(username))
+			  .andExpect(jsonPath("$.role").value(role))
+			  .andExpect(jsonPath("$.shopId").value(1L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		MockHttpSession authenticatedSession = getMockHttpSession(loginResult);
+
+		// Logout without CSRF Token
+		mockMvc.perform(
+				    post("/api/auth/logout")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isForbidden());
+
+		assertThat(authenticatedSession.isInvalid()).isFalse();
+
+		// Should get current user info successfully
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value(username))
+			  .andExpect(jsonPath("$.role").value(role))
+			  .andExpect(jsonPath("$.shopId").value(1L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath());
+	}
+
+	@Test
 	void contextLoads() {
+	}
+
+	private @NonNull MvcResult getCsrfResult() throws Exception {
+		return mockMvc.perform(get("/api/auth/csrf"))
+			  .andExpect(status().isOk())
+			  .andReturn();
+	}
+
+	private static @NonNull MockHttpSession getMockHttpSession(MvcResult csrfResult) {
+		MockHttpSession session = (MockHttpSession) csrfResult.getRequest().getSession(false);
+
+		assertThat(session).isNotNull();
+		return session;
+	}
+
+	private CsrfResponse getCsrfContent(MvcResult csrfResult) throws UnsupportedEncodingException {
+		return jsonMapper.readValue(
+			  csrfResult.getResponse().getContentAsString(),
+			  CsrfResponse.class
+		);
 	}
 
 }
