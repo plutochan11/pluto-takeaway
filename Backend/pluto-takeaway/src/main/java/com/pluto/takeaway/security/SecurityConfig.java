@@ -41,11 +41,10 @@ public class SecurityConfig {
 						"/api/shops/*/menu",
 						"/api/auth/csrf"
 				    ).permitAll()
+				    .requestMatchers("/api/admin/**").hasRole("SHOP_ADMIN")
 				    .anyRequest().authenticated()
 			  )
 			  .httpBasic(AbstractHttpConfigurer::disable)
-//			  .formLogin(AbstractHttpConfigurer::disable)
-
 			  .formLogin(form -> form
 				    .loginProcessingUrl("/api/auth/login")
 				    .successHandler((request, response, authentication) -> {

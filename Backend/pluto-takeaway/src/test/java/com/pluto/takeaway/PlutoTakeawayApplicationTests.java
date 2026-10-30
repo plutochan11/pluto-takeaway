@@ -226,27 +226,12 @@ class PlutoTakeawayApplicationTests {
 
 		MockHttpSession session = getMockHttpSession(csrfResult);
 
-		// Log in with CSRF Token
+		// Log in admin_a with CSRF Token
+		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(session, csrf);
+
 		String username = "admin_a";
 		String password = "password";
 		String role = "SHOP_ADMIN";
-		MvcResult loginResult = mockMvc.perform(
-				    post("/api/auth/login")
-						.session(session)
-						.header(csrf.headerName(), csrf.token())
-						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
-						.param("username", username)
-						.param(password, password)
-			  )
-			  .andExpect(status().isOk())
-			  .andExpect(jsonPath("$.username").value(username))
-			  .andExpect(jsonPath("$.role").value(role))
-			  .andExpect(jsonPath("$.shopId").value(1L))
-			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
-			  .andReturn();
-
-		MockHttpSession authenticatedSession = getMockHttpSession(loginResult);
-
 		mockMvc.perform(
 				    get("/api/auth/me")
 						.session(authenticatedSession)
@@ -358,23 +343,8 @@ class PlutoTakeawayApplicationTests {
 		// Get session info
 		MockHttpSession session = getMockHttpSession(csrfResult);
 
-		// Log in with CSRF Token
-		MvcResult loginResult = mockMvc.perform(
-				    post("/api/auth/login")
-						.session(session)
-						.header(csrf.headerName(), csrf.token())
-						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
-						.param("username", "customer_a")
-						.param("password", "password")
-			  )
-			  .andExpect(status().isOk())
-			  .andExpect(jsonPath("$.username").value("customer_a"))
-			  .andExpect(jsonPath("$.role").value("CUSTOMER"))
-			  .andExpect(jsonPath("$.shopId").value(nullValue()))
-			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
-			  .andReturn();
-
-		MockHttpSession authenticatedSession = getMockHttpSession(loginResult);
+		// Log in customer_a with CSRF Token
+		MockHttpSession authenticatedSession = logInCustomerAAndReturnAuthenticatedSession(session, csrf);
 
 		mockMvc.perform(
 				    get("/api/auth/me")
@@ -499,6 +469,125 @@ class PlutoTakeawayApplicationTests {
 	}
 
 	@Test
+	void shouldRequireLoginForAdminShop() throws Exception {
+
+		// Access admin shop without login
+		mockMvc.perform(get("/api/admin/shops/1"))
+			  .andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void shouldRejectCustomerAccessToAdminShop() throws Exception {
+
+		// Get CSRF
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		// Get Session
+		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
+
+		// Log in as customer_a
+		MockHttpSession authenticatedSession = logInCustomerAAndReturnAuthenticatedSession(mockHttpSession, csrfContent);
+
+		// Access an admin shop
+		mockMvc.perform(
+				    get("/api/admin/shops/1")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isForbidden());
+	}
+
+	@Test
+	void shouldAllowAdminToReadOwnShop() throws Exception {
+
+		// Get CSRF
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		// Get Session
+		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
+
+		// Log in as admin_a
+		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(mockHttpSession, csrfContent);
+
+		// Access their own admin shop
+		mockMvc.perform(
+				    get("/api/admin/shops/1")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.id").value(1L))
+			  .andExpect(jsonPath("$.name").value("Pluto Kitchen"))
+			  .andExpect(jsonPath("$.status").value("OPEN"));
+	}
+
+	@Test
+	void shouldRejectAdminAAccessToAnotherShop() throws Exception {
+
+		// Get CSRF
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		// Get Session
+		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
+
+		// Log in as admin_a
+		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(mockHttpSession, csrfContent);
+
+		// Access an admin shop that isn't owned by them
+		mockMvc.perform(
+				    get("/api/admin/shops/2")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isForbidden());
+	}
+
+	@Test
+	void shouldAllowSecondAdminToReadOwnShop() throws Exception {
+
+		// Get CSRF
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		// Get Session
+		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
+
+		// Log in as admin_b
+		MockHttpSession authenticatedSession = logInAdminBAndReturnSession(mockHttpSession, csrfContent);
+
+		// Access their own admin shop
+		mockMvc.perform(
+				    get("/api/admin/shops/2")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.id").value(2L))
+			  .andExpect(jsonPath("$.name").value("Harbour Cafe"))
+			  .andExpect(jsonPath("$.status").value("OPEN"));
+	}
+
+	@Test
+	void shouldRejectAdminBAccessToAnotherShop() throws Exception {
+
+		// Get CSRF
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		// Get Session
+		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
+
+		// Log in as admin_b
+		MockHttpSession authenticatedSession = logInAdminBAndReturnSession(mockHttpSession, csrfContent);
+
+		// Access an admin shop that isn't owned by them
+		mockMvc.perform(
+				    get("/api/admin/shops/1")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isForbidden());
+	}
+
+	@Test
 	void contextLoads() {
 	}
 
@@ -520,6 +609,66 @@ class PlutoTakeawayApplicationTests {
 			  csrfResult.getResponse().getContentAsString(),
 			  CsrfResponse.class
 		);
+	}
+
+	private @NonNull MockHttpSession logInAdminAAndReturnAuthenticatedSession(MockHttpSession session, CsrfResponse csrf) throws Exception {
+
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "admin_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("admin_a"))
+			  .andExpect(jsonPath("$.role").value("SHOP_ADMIN"))
+			  .andExpect(jsonPath("$.shopId").value(1L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		return getMockHttpSession(loginResult);
+	}
+
+	private @NonNull MockHttpSession logInCustomerAAndReturnAuthenticatedSession(MockHttpSession session, CsrfResponse csrf) throws Exception {
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "customer_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("customer_a"))
+			  .andExpect(jsonPath("$.role").value("CUSTOMER"))
+			  .andExpect(jsonPath("$.shopId").value(nullValue()))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		return getMockHttpSession(loginResult);
+	}
+
+	private @NonNull MockHttpSession logInAdminBAndReturnSession(MockHttpSession mockHttpSession, CsrfResponse csrfContent) throws Exception {
+		MvcResult loginResult = mockMvc.perform(
+				    post("/api/auth/login")
+						.session(mockHttpSession)
+						.header(csrfContent.headerName(), csrfContent.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "admin_b")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("admin_b"))
+			  .andExpect(jsonPath("$.role").value("SHOP_ADMIN"))
+			  .andExpect(jsonPath("$.shopId").value(2L))
+			  .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+			  .andReturn();
+
+		MockHttpSession authenticatedSession = (MockHttpSession) loginResult.getRequest().getSession(false);
+		assertThat(authenticatedSession).isNotNull();
+		return authenticatedSession;
 	}
 
 }
