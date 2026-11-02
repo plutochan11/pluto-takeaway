@@ -1,11 +1,11 @@
 package com.pluto.takeaway.controller;
 
 import com.pluto.takeaway.dto.ShopResponse;
+import com.pluto.takeaway.dto.UpdateShopRequest;
 import com.pluto.takeaway.service.AdminShopService;
+import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class AdminShopController {
@@ -26,6 +26,20 @@ public class AdminShopController {
 		return adminShopService.getOwnShop(
 			  authentication.getName(),
 			  shopId
+		);
+	}
+
+	@PatchMapping("/api/admin/shops/{shopId}")
+	public ShopResponse updateShopName(
+		  @PathVariable("shopId") Long shopId,
+		  @Valid @RequestBody UpdateShopRequest request,
+		  Authentication authentication
+	) {
+
+		return adminShopService.updateShopName(
+			  authentication.getName(),
+			  shopId,
+			  request.name()
 		);
 	}
 }

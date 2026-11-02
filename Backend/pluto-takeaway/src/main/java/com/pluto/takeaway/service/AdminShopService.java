@@ -5,6 +5,7 @@ import com.pluto.takeaway.entity.Shop;
 import com.pluto.takeaway.entity.UserAccount;
 import com.pluto.takeaway.repository.ShopRepository;
 import com.pluto.takeaway.repository.UserAccountRepository;
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,35 @@ public class AdminShopService {
 	@Transactional(readOnly = true)
 	public ShopResponse getOwnShop(String username, Long shopId) {
 
+		Shop shop = findOwnedShop(username, shopId);
+
+		return new ShopResponse(
+			  shop.getId(),
+			  shop.getName(),
+			  shop.getStatus()
+		);
+	}
+
+	@Transactional
+	public ShopResponse updateShopName(
+		  String username,
+		  Long shopId,
+		  String name
+	) {
+
+		Shop shop = findOwnedShop(username, shopId);
+
+		shop.rename(name);
+
+		return new ShopResponse(
+			  shop.getId(),
+			  shop.getName(),
+			  shop.getStatus()
+		);
+	}
+
+	private @NonNull Shop findOwnedShop(String username, Long shopId) {
+
 		// Find user account with username
 		// Return 401 if not found
 		UserAccount userAccount = userAccountRepository.findByUsername(username)
@@ -38,18 +68,14 @@ public class AdminShopService {
 			throw new ResponseStatusException(HttpStatus.FORBIDDEN);
 		}
 
+		// Check if they own this shop
+		// Return 403 if not
 		if (!Objects.equals(shopId, userAccount.getShopId())) {
 			throw new ResponseStatusException(HttpStatus.FORBIDDEN);
 		}
 
 		// Find shop
-		Shop shop = shopRepository.findById(userAccount.getShopId())
+		return shopRepository.findById(userAccount.getShopId())
 			  .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-
-		return new ShopResponse(
-			  shop.getId(),
-			  shop.getName(),
-			  shop.getStatus()
-		);
 	}
 }

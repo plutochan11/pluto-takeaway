@@ -30,4 +30,8 @@ public class Shop {
 	public String getStatus() {
 		return status;
 	}
+
+	public void rename(String name) {
+		this.name = name;
+	}
 }

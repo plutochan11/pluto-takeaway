@@ -1,6 +1,9 @@
 package com.pluto.takeaway;
 
+import com.pluto.takeaway.dto.UpdateShopRequest;
+import com.pluto.takeaway.entity.Shop;
 import com.pluto.takeaway.entity.UserAccount;
+import com.pluto.takeaway.repository.ShopRepository;
 import com.pluto.takeaway.repository.UserAccountRepository;
 import com.pluto.takeaway.security.AccountUserDetailsService;
 import org.jspecify.annotations.NonNull;
@@ -15,11 +18,13 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import com.pluto.takeaway.dto.CsrfResponse;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.UnsupportedEncodingException;
@@ -31,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -49,6 +55,9 @@ class PlutoTakeawayApplicationTests {
 
 	@Autowired
 	private JsonMapper jsonMapper;
+
+	@Autowired
+	private ShopRepository shopRepository;
 
 	@Test
 	void shouldReturnShopOneMenu() throws Exception {
@@ -220,14 +229,7 @@ class PlutoTakeawayApplicationTests {
 	void shouldReturnCurrentUser() throws Exception {
 
 		// Request for CSRF Token
-		MvcResult csrfResult = getCsrfResult();
-
-		CsrfResponse csrf = getCsrfContent(csrfResult);
-
-		MockHttpSession session = getMockHttpSession(csrfResult);
-
-		// Log in admin_a with CSRF Token
-		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(session, csrf);
+		MockHttpSession authenticatedSession = logInAsAdminA();
 
 		String username = "admin_a";
 		String password = "password";
@@ -501,14 +503,7 @@ class PlutoTakeawayApplicationTests {
 	void shouldAllowAdminToReadOwnShop() throws Exception {
 
 		// Get CSRF
-		MvcResult csrfResult = getCsrfResult();
-		CsrfResponse csrfContent = getCsrfContent(csrfResult);
-
-		// Get Session
-		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
-
-		// Log in as admin_a
-		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(mockHttpSession, csrfContent);
+		MockHttpSession authenticatedSession = logInAsAdminA();
 
 		// Access their own admin shop
 		mockMvc.perform(
@@ -525,14 +520,7 @@ class PlutoTakeawayApplicationTests {
 	void shouldRejectAdminAAccessToAnotherShop() throws Exception {
 
 		// Get CSRF
-		MvcResult csrfResult = getCsrfResult();
-		CsrfResponse csrfContent = getCsrfContent(csrfResult);
-
-		// Get Session
-		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
-
-		// Log in as admin_a
-		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(mockHttpSession, csrfContent);
+		MockHttpSession authenticatedSession = logInAsAdminA();
 
 		// Access an admin shop that isn't owned by them
 		mockMvc.perform(
@@ -585,6 +573,386 @@ class PlutoTakeawayApplicationTests {
 						.session(authenticatedSession)
 			  )
 			  .andExpect(status().isForbidden());
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldAllowAdminToUpdateOwnShopName() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF Token
+		MvcResult freshCsrfResult = mockMvc.perform(
+				    get("/api/auth/csrf")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse freshCsrfContent = getCsrfContent(freshCsrfResult);
+
+
+		// Create DTO and convert to JSON
+		String updateName = "Pluto Kitchen Update";
+		UpdateShopRequest request = new UpdateShopRequest(updateName);
+		String requestBody = jsonMapper.writeValueAsString(request);
+
+		// Request to update shop name and verify response body
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrfContent.headerName(), freshCsrfContent.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.id").value(1L))
+			  .andExpect(jsonPath("$.name").value(updateName))
+			  .andExpect(jsonPath("$.status").value("OPEN"));
+
+		// Get updated shop from DB and verify changes
+		Shop updatedShop = shopRepository.findById(1L).orElseThrow();
+
+		assertThat(updatedShop.getName()).isEqualTo(updateName);
+		assertThat(updatedShop.getStatus()).isEqualTo("OPEN");
+
+		// Verify this update doesn't affect other rows
+		Shop shop2 = shopRepository.findById(2L).orElseThrow();
+
+		assertThat(shop2.getName()).isEqualTo("Harbour Cafe");
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRequireLoginToUpdateShop() throws Exception {
+
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		// Request to update shop anonymously
+		UpdateShopRequest request = new UpdateShopRequest("Should not update shop name");
+		String requestJson = jsonMapper.writeValueAsString(request);
+
+		// Should get 401
+		// DB entries should be unchanged
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(session)
+						.header(csrfContent.headerName(), csrfContent.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestJson)
+			  )
+			  .andExpect(status().isUnauthorized());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectCustomerShopUpdate() throws Exception {
+
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		// Log in as a customer
+		MockHttpSession authenticatedSession = logInCustomerAAndReturnAuthenticatedSession(session, csrfContent);
+
+		// Get fresh CSRF Token
+		MvcResult freshCsrfResult = mockMvc.perform(
+				    get("/api/auth/csrf").session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse freshCsrfContent = getCsrfContent(freshCsrfResult);
+
+		// Request to update shop as a customer
+		UpdateShopRequest request = new UpdateShopRequest("Should not update shop name");
+		String requestJson = jsonMapper.writeValueAsString(request);
+
+		// Should get 403
+		// DB entries should be unchanged
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrfContent.headerName(), freshCsrfContent.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestJson)
+			  )
+			  .andExpect(status().isForbidden());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectUpdateToAnotherShop() throws Exception {
+
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		// Log in as a shop admin who doesn't own the shop to be updated
+		MockHttpSession authenticatedSession = logInAdminBAndReturnSession(session, csrfContent);
+
+		// Get fresh CSRF Token
+		MvcResult freshCsrfResult = mockMvc.perform(
+				    get("/api/auth/csrf").session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse freshCsrfContent = getCsrfContent(freshCsrfResult);
+
+		// Request to update shop
+		UpdateShopRequest request = new UpdateShopRequest("Should not update shop name");
+		String requestJson = jsonMapper.writeValueAsString(request);
+
+		// Should get 403
+		// DB entries should be unchanged
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrfContent.headerName(), freshCsrfContent.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestJson)
+			  )
+			  .andExpect(status().isForbidden());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectShopUpdateWithoutCsrfToken() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Request to update shop without CSRF Token
+		UpdateShopRequest request = new UpdateShopRequest("Should not update shop name");
+		String requestJson = jsonMapper.writeValueAsString(request);
+
+		// Should return 403
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestJson)
+			  )
+			  .andExpect(status().isForbidden());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectShopUpdateWithInvalidCsrfToken() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF Token
+		MvcResult freshCsrfResult = mockMvc.perform(
+				    get("/api/auth/csrf").session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andReturn();
+
+		CsrfResponse freshCsrfContent = getCsrfContent(freshCsrfResult);
+
+		// Request to update shop with invalid Token
+		String invalidCsrfToken = "invalid-csrf-token";
+
+		UpdateShopRequest request = new UpdateShopRequest("Should not update shop name");
+		String requestJson = jsonMapper.writeValueAsString(request);
+
+		// Should return 403
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrfContent.headerName(), invalidCsrfToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestJson)
+			  )
+			  .andExpect(status().isForbidden());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectMissingShopName() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF
+		CsrfResponse freshCsrf = getCsrf(authenticatedSession);
+
+		// Request to update shop with missing shop name
+		// Should return 400
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrf.headerName(), freshCsrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}")
+			  )
+			  .andExpect(status().isBadRequest());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectNullShopName() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF
+		CsrfResponse freshCsrf = getCsrf(authenticatedSession);
+
+		// Request to update shop with null shop name
+		String requestBody = jsonMapper.writeValueAsString(new UpdateShopRequest(null));
+
+		// Should return 400
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrf.headerName(), freshCsrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody)
+			  )
+			  .andExpect(status().isBadRequest());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectBlankShopName() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF
+		CsrfResponse freshCsrf = getCsrf(authenticatedSession);
+
+		// Request to update shop with null shop name
+		String requestBody = jsonMapper.writeValueAsString(new UpdateShopRequest("      "));
+
+		// Should return 400
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrf.headerName(), freshCsrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody)
+			  )
+			  .andExpect(status().isBadRequest());
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectShopNameLongerThanLimit() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF
+		CsrfResponse freshCsrf = getCsrf(authenticatedSession);
+
+		// Request to update shop with name longer than limit
+		String requestBody = jsonMapper.writeValueAsString(new UpdateShopRequest("a".repeat(101)));
+
+		// Should return 400
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrf.headerName(), freshCsrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody)
+			  )
+			  .andExpect(status().isBadRequest())
+			  .andExpect(result ->
+				    assertThat(result.getResolvedException())
+						.isInstanceOf(MethodArgumentNotValidException.class));
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldAcceptShopNameAtMaximumLength() throws Exception {
+
+		MockHttpSession authenticatedSession = logInAsAdminA();
+
+		// Get fresh CSRF
+		CsrfResponse freshCsrf = getCsrf(authenticatedSession);
+
+		// Request to update shop with name at max length
+		String requestBody = jsonMapper.writeValueAsString(new UpdateShopRequest("a".repeat(100)));
+
+		// Should return 200
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(freshCsrf.headerName(), freshCsrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.name").value("a".repeat(100)));
 	}
 
 	@Test
@@ -669,6 +1037,34 @@ class PlutoTakeawayApplicationTests {
 		MockHttpSession authenticatedSession = (MockHttpSession) loginResult.getRequest().getSession(false);
 		assertThat(authenticatedSession).isNotNull();
 		return authenticatedSession;
+	}
+
+	private void assertShopNamesUnchanged() {
+
+		assertThat(shopRepository.findById(1L).orElseThrow().getName())
+			  .isEqualTo("Pluto Kitchen");
+
+		assertThat(shopRepository.findById(2L).orElseThrow().getName())
+			  .isEqualTo("Harbour Cafe");
+	}
+
+	private MockHttpSession logInAsAdminA() throws Exception {
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		return logInAdminAAndReturnAuthenticatedSession(session, csrfContent);
+	}
+
+	private CsrfResponse getCsrf(MockHttpSession session) throws Exception {
+		MvcResult freshCsrfResult = mockMvc.perform(
+				    get("/api/auth/csrf").session(session)
+			  )
+			  .andExpect(status().isOk())
+			  .andReturn();
+		return getCsrfContent(freshCsrfResult);
 	}
 
 }
