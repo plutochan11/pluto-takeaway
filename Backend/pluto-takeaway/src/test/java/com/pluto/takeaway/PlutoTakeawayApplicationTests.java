@@ -1104,6 +1104,64 @@ class PlutoTakeawayApplicationTests {
 	}
 
 	@Test
+	void shouldRotateSessionIdOnLogin() throws Exception {
+
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		String sessionId = session.getId();
+
+		MockHttpSession authenticatedSession = logInAdminAAndReturnAuthenticatedSession(session, csrfContent);
+
+		assertThat(authenticatedSession.getId())
+			  .isNotEqualTo(sessionId);
+
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(authenticatedSession)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.username").value("admin_a"));
+	}
+
+	@Test
+	@Sql(
+		  statements = "UPDATE user_account SET enabled = FALSE WHERE username = 'customer_a'"
+	)
+	@Sql(
+		  statements = "UPDATE user_account SET enabled = TRUE WHERE username = 'customer_a'",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectDisabledAccountLogin() throws Exception {
+		MvcResult csrfResult = getCsrfResult();
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		// Log in as a disabled account
+		mockMvc.perform(
+				    post("/api/auth/login")
+						.session(session)
+						.header(csrfContent.headerName(), csrfContent.token())
+						.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+						.param("username", "customer_a")
+						.param("password", "password")
+			  )
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+
+		// Get current user
+		mockMvc.perform(
+				    get("/api/auth/me")
+						.session(session)
+			  )
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+	}
+
+	@Test
 	void contextLoads() {
 	}
 
