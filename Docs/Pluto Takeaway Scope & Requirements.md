@@ -8,7 +8,7 @@
 | Document owner | Pluto |
 | Status | Working specification; confirmed decisions and proposals distinguished below |
 | Intended audience | Project author, future maintainers and technical reviewers |
-| Implementation status | M1 public browsing complete; eight database-backed integration tests pass; M2 identity/ownership design next |
+| Implementation status | M1 public browsing and bounded M2 identity/ownership backend complete; 43 tests pass (developer/local report evidence, 3 November 2026); M3 rules next |
 
 ## 1. Purpose and background
 
@@ -298,7 +298,7 @@ Existing implementation choices are references, not requirements to reproduce ol
 | OPEN-02 | How does simulated payment interact with order creation, and are failure cases required? | Before checkout implementation |
 | OPEN-03 | When should a same-shop repeat-purchase warning appear? | Before checkout interface design |
 | OPEN-04 | What freshness target is required for changes on an already open page? | Before choosing polling or push notifications |
-| OPEN-05 | What customer registration/login and administrator provisioning flows are necessary? | Before identity implementation |
+| OPEN-05 — resolved | Seeded customers/admins; Session login/logout; no public registration or merchant onboarding in M2. See ADR-001. | Implemented; 3 November 2026 |
 | OPEN-06 | What exact order states and collection-confirmation action are needed? | Before order API design |
 | OPEN-07 | What pricing confirmation, basket versioning and concurrency strategy will be used? | Before checkout implementation |
 

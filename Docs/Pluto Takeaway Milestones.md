@@ -3,12 +3,12 @@
 | Field                  | Value                                                                                     |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
 | Version                | 1.0                                                                                       |
-| Created / last updated | Created 19 October 2026; updated 25 October 2026 |
+| Created / last updated | Created 19 October 2026; updated 3 November 2026 |
 | Owner                  | Pluto                                                                                     |
 | Document status        | Baseline execution plan; update as work is completed                                      |
 | Requirements baseline  | [Product Scope and Requirements v0.3](./Pluto%20Takeaway%20Scope%20%26%20Requirements.md) |
-| Current milestone | M2 — identity and ownership boundaries |
-| Implementation status | M1 completed 25 October 2026; M2 design next |
+| Current milestone | M3 — shop, menu and configurable-meal management; rules next |
+| Implementation status | M1 completed 25 October 2026; bounded M2 backend completed 3 November 2026; 43 tests passing (developer/report evidence) |
 
 ## 1. Target and purpose
 
@@ -113,11 +113,11 @@ From an empty database, the documented setup produces the same two-shop demonstr
 
 ### Tasks, in execution order
 
-- [ ] **M2.1 — Set the identity policy.** Resolve OPEN-05 in `Docs/Decisions.md`: customer login/registration scope, administrator provisioning, session/token mechanism, expiry and logout behaviour. Recommended minimum: seeded administrators and reusable customer accounts; no merchant self-service onboarding. Distinguish demonstration accounts from a public registration flow.
-- [ ] **M2.2 — Model accounts and shop membership.** Add migrations for accounts and the agreed administrator-to-shop mapping. Seed two customers and administrators for A and B. Hash passwords using a suitable password-hashing implementation; keep real credentials outside source control. Define unique login identifiers and inactive-account behaviour.
-- [ ] **M2.3 — Implement authentication.** Add the documented login endpoint and chosen session/token validation. Derive the current user and role on the server. Return useful but non-sensitive errors for invalid credentials, missing credentials and expired credentials. Document how a caller authenticates each request.
-- [ ] **M2.4 — Enforce shop-scoped access.** Implement a protected own-shop read and update for a small field such as the shop name. Verify membership and actual target ownership in the backend; changing a path ID or request body must not confer access. Define consistent unauthenticated and forbidden/not-found responses without leaking protected data. Apply the same rule to protected reads and writes.
-- [ ] **M2.5 — Prove the boundary.** Test unauthenticated management access; a customer calling management APIs; admin A reading/updating A; admin A reading/updating B; and a forged owner/shop field. Confirm B remains unchanged after rejected writes. Record the access matrix and test evidence in the API contract and evidence log.
+- [x] **M2.1 — Set the identity policy.** Resolve OPEN-05 in `Docs/Decisions.md`: customer login/registration scope, administrator provisioning, session/token mechanism, expiry and logout behaviour. Recommended minimum: seeded administrators and reusable customer accounts; no merchant self-service onboarding. Distinguish demonstration accounts from a public registration flow.
+- [x] **M2.2 — Model accounts and shop membership.** Add migrations for accounts and the agreed administrator-to-shop mapping. Seed two customers and administrators for A and B. Hash passwords using a suitable password-hashing implementation; keep real credentials outside source control. Define unique login identifiers and inactive-account behaviour.
+- [x] **M2.3 — Implement authentication.** Add the documented login endpoint and chosen session/token validation. Derive the current user and role on the server. Return useful but non-sensitive errors for invalid credentials, missing credentials and expired credentials. Document how a caller authenticates each request.
+- [x] **M2.4 — Enforce shop-scoped access.** Implement a protected own-shop read and update for a small field such as the shop name. Verify membership and actual target ownership in the backend; changing a path ID or request body must not confer access. Define consistent unauthenticated and forbidden/not-found responses without leaking protected data. Apply the same rule to protected reads and writes.
+- [x] **M2.5 — Prove the boundary.** Test unauthenticated management access; a customer calling management APIs; admin A reading/updating A; admin A reading/updating B; and a forged owner/shop field. Confirm B remains unchanged after rejected writes. Record the access matrix and test evidence in the API contract and evidence log.
 
 ### Completion gate
 
@@ -306,9 +306,9 @@ Copy a row for each completed task or milestone. Record exact commands/results r
 
 ### What to do next
 
-1. Review the M1 completion documentation and save it in a separate documentation commit.
-2. Begin M2.1: agree authentication scope, account provisioning and session/token policy before implementing security.
-3. Write the M2 API contract and account data model, then implement and verify ownership boundaries.
+1. Review and commit the M2 completion documentation separately from application code.
+2. Start M3.1: agree meal groups/options, required selections, supplements, quantity and money rules using worked examples.
+3. Write the M3 model/API contract before migrations; then implement one bounded management slice at a time.
 
 M1 completion evidence, 25 October 2026:
 
@@ -320,3 +320,13 @@ M1 completion evidence, 25 October 2026:
 - Browser startup and Flyway restart were previously verified by the developer. A complete independent replay of every manual README instruction is not claimed.
 
 Scope refinement: M1 accepts the documented Spring Boot default error representation and verifies HTTP 400/404. A stable custom error DTO is deferred to M2 so authentication, authorisation and application errors can be designed together. Status behaviour remains required and tested. Query-count logs were observed but are not enforced by an automated performance assertion.
+
+
+M2 completion evidence, 3 November 2026:
+
+- Account schema V3 with dev/test V4 fixtures; BCrypt password validation, enabled-account handling and Session authentication implemented.
+- Login/current-user/logout, CSRF endpoint, admin own-shop GET/PATCH and uniform documented error codes implemented. PATCH updates name only; unknown assignment fields are ignored and cannot change status/ownership.
+- Agent executed the 40-test suite on 2 November with no failures/errors. Developer subsequently reports 43 tests passing; reviewed local Surefire report corroborates 43 tests, 0 failures/errors. Final additions cover unknown fields, Session ID rotation and disabled login.
+- M2.1–M2.5 core completion gate met. Session idle timeout and HttpOnly/SameSite are configured; actual timeout, old-cookie replay, fresh M2 setup and HTTPS deployment cookie behaviour are not claimed tested. See M2 contract and Demo Guide for exact limits.
+- Completed implementation commits include `e217f43` role/ownership, `0a48fd0` shop-name updates, `62d65e4` error responses and `2b6ee23` Session lifecycle. Documentation work performs no Git staging/commit/push.
+- M3 menu management, configurable meals, baskets and orders remain incomplete. Cross-shop management evidence applies to current shop endpoints only, not future resources.

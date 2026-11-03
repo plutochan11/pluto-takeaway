@@ -1,6 +1,6 @@
 # M2 Identity and Shop Ownership — API Design
 
-Date: 25 October 2026. Status: proposed implementation contract; Session choice confirmed, endpoints not yet implemented. Read together with ADR-001 in `Decisions.md`.
+Created: 25 October 2026. Updated: 3 November 2026. Status: implemented bounded M2 backend contract; verification limits below. Read together with ADR-001 in `Decisions.md`.
 
 ## Endpoints
 
@@ -30,7 +30,7 @@ Use the returned header/parameter name and token; do not hardcode runtime token 
 Current-user DTO shape (example administrator):
 
 ```json
-{"id":101,"username":"admin_a","role":"SHOP_ADMIN","shopId":1}
+{"id":103,"username":"admin_a","role":"SHOP_ADMIN","shopId":1}
 ```
 
 For customers, `shopId` is null. Never return a password/hash or a session identifier in this DTO. Example IDs are illustrative, not reserved fixture IDs.
@@ -41,9 +41,9 @@ Shop PATCH body:
 {"name":"Updated Shop Name"}
 ```
 
-Name must be nonblank and at most 100 characters. The route selects the target shop; account identity, role and owning shop come from the server. The update DTO has no owner/account/shop assignment fields. Decide strict handling of unknown JSON properties before implementing mutation tests.
+Name must be nonblank and at most 100 characters. The route selects the target shop; account identity, role and owning shop come from the server. The update DTO has no owner/account/shop assignment fields. Unknown JSON properties are deliberately ignored via the request DTO. Extra `id`, `shopId` and `status` do not change the selected shop, shop status or account ownership; an integration test verifies this behaviour. Missing/null/blank names are rejected; 100 characters are accepted and 101 rejected.
 
-## Error contract to implement
+## Implemented error contract
 
 Use JSON `{ "code": "...", "message": "..." }` for the following cases, without redirects, secrets or database details:
 
@@ -73,4 +73,17 @@ Bad credentials share one generic response so login does not disclose whether a 
 9. Login rotates an existing pre-authentication session ID; valid logout invalidates authentication.
 10. Tests exercise actual login/session persistence as well as permission rules.
 
-No result is marked passed at design time. Complete these cases before closing M2.
+## Verification record — 3 November 2026
+
+The bounded M2 backend completion gate is met. The developer reports 43 passing tests, and the reviewed local Surefire report records 43 tests with zero failures/errors. Agent execution on 2 November independently established the earlier 40-test suite; the final 43-test run is developer/report evidence.
+
+| Acceptance area | Evidence and limits |
+|---|---|
+| Public browsing, login, current identity, role/ownership reads/writes | Real login + Session reuse in MockMvc against Testcontainers MySQL; customers denied; A/B reads tested both directions; cross-shop writes denied |
+| Password/account state | Correct/wrong password and disabled-account login; unknown username lookup/adapter tested, but no dedicated unknown-username HTTP login case |
+| Write safety | DB queried after successful/rejected writes; extra JSON fields cannot change status/ownership; name boundaries and malformed JSON covered |
+| CSRF | Missing/invalid tokens rejected with `CSRF_INVALID`; valid token taken from the same Session permits authorised operations |
+| Session lifecycle | Mock Session ID changes on login; logout invalidates the authenticated mock Session; subsequent anonymous protected GET returns 401 |
+| Expiration and transport | 30-minute inactivity timeout, HttpOnly and SameSite=Lax configured; actual Tomcat timeout, old-cookie replay and deployed HTTPS/Secure behaviour not integration-tested |
+
+No listening HTTP server is started by MockMvc. Browser observations confirmed cookie creation, missing/invalid CSRF rejection and successful login in local development; a complete fresh manual setup replay has not been performed. Existing sessions are not immediately revoked on account edits, and sessions do not survive application restart. See ADR-001 for scope.

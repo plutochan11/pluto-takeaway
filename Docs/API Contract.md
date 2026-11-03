@@ -1,6 +1,6 @@
 # M1 Public Browsing API Contract
 
-Updated: 22 October 2026. Describes the current implementation, not future ordering endpoints.
+Updated: 3 November 2026. Describes the current implementation, not future ordering endpoints.
 
 Base URL for local development: `http://localhost:8080`. Authentication is not required for these routes.
 
@@ -65,6 +65,9 @@ A shop with no categories returns `{"shop": {...}, "categories": []}`. A categor
 
 ## Errors and current limits
 
-Status behaviour is specified above. The error body currently uses Spring Boot's default error handling; no custom stable error DTO has been introduced. A browser may receive a Whitelabel HTML error page depending on content negotiation. `Accept: application/json` requests a JSON representation, whose exact fields are not frozen by this contract. Do not assume the reason string is included in that body.
+M2 introduced a stable JSON body for these documented cases:
 
-The 400 and 404 status rules follow the current code/framework behaviour; saved automated assertions are still pending. The developer chose to defer error-page presentation. A shared application error contract remains an open M1 cleanup item.
+- Unknown shop: HTTP 404, `{"code":"RESOURCE_NOT_FOUND","message":"Resource not found"}`.
+- Nonnumeric shop ID: HTTP 400, `{"code":"VALIDATION_FAILED","message":"Request input is invalid"}`.
+
+Status, JSON content type and error fields have integration-test assertions. See [M2 contract](./M2%20API%20Contract.md) for security and write-validation errors. Other framework errors are not universally normalised by this contract.

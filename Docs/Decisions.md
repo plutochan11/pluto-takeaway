@@ -2,9 +2,9 @@
 
 ## ADR-001 — Session authentication for M2
 
-Date: 25 October 2026.
+Date: 25 October 2026; implementation/evidence updated 3 November 2026.
 
-Status: Session authentication explicitly selected by Pluto. The endpoint and lifecycle details below are proposed implementation defaults, to review before security code is introduced.
+Status: accepted and implemented for the bounded M2 backend. Core behaviour is covered by database-backed MockMvc tests; deployment cookie/timeout limits are recorded below.
 
 ### Context and decision
 
@@ -12,13 +12,13 @@ The current application is one Spring Boot backend with a planned browser demons
 
 Initial account provisioning uses development/test fixtures: two customers and two administrators for different shops. Public registration and merchant onboarding are deferred. Passwords are stored as BCrypt hashes; real passwords are never committed. Fixture credentials will be deliberately public, development/test-only values and will not be reused as deployment secrets.
 
-### Proposed bounded account model
+### Implemented bounded account model
 
 One `user_account` table stores ID, username, password hash, role, enabled flag and optional shop ID. Each account has exactly one role initially. A `CUSTOMER` has no shop ID; a `SHOP_ADMIN` belongs to exactly one shop. A shop can have several administrators. A foreign key enforces shop existence; a role/shop CHECK enforces the allowed combinations. Multiple-shop membership and combined customer/admin roles require a future model change.
 
 Database account records are persistent business data. HTTP sessions are separate runtime authentication state; M2 does not add a database session table or Redis.
 
-### Proposed authentication lifecycle
+### Authentication lifecycle
 
 - Use Spring Security's form-login processing at `/api/auth/login`, accepting URL-encoded username/password fields, with JSON success/failure handlers rather than redirects. This uses the framework authentication/session persistence flow instead of implementing a login controller manually.
 - Use a session cookie (normally `JSESSIONID`), HttpOnly, SameSite=Lax; use Secure over HTTPS when deployed. Local HTTP development cannot require a Secure cookie.
@@ -35,4 +35,10 @@ Public browsing remains anonymous. Protected management requires `SHOP_ADMIN` pl
 
 Session lookup and logout are straightforward for this bounded deployment. Clients must preserve cookies and supply valid CSRF tokens for state changes. Multiple backend instances would require a deliberate session-sharing/routing design. JWT remains a possible later learning exercise, not a promised migration.
 
-Tests must prove real login and session reuse, CSRF behaviour, logout invalidation, customer/admin role boundaries, cross-shop read/write denial and preservation of anonymous M1 browsing. Tests that use only mocked authenticated users are insufficient to establish the login/session lifecycle.
+The 43-test suite covers real login and session reuse, CSRF behaviour, logout invalidation, Session ID rotation, disabled login, customer/admin role boundaries, cross-shop read/write denial, ignored assignment fields and anonymous browsing. Tests use framework authentication with fixture accounts, not mocked authenticated users.
+
+Evidence: developer reports 43 passing tests; local Surefire report corroborated on 3 November. Agent independently executed the earlier 40-test suite on 2 November. No real-container idle-timeout or old-cookie replay check is claimed. HttpOnly/SameSite and the 30-minute timeout are explicit configuration; Secure cookie verification requires a future HTTPS deployment.
+
+PATCH accepts only `name` through a dedicated DTO and explicit entity rename. Unknown JSON properties are deliberately ignored; tests show extra `id`, `shopId` and `status` fields cannot redirect the update or change status/account ownership. Names are required, nonblank and at most 100 characters; no trimming policy is implied.
+
+Security errors are written by configured handlers; MVC validation/binding and selected `ResponseStatusException` statuses use advice. Both use `{code,message}`. Unmapped exception statuses retain framework resolution; this is not a universal catch-all error policy.

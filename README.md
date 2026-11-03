@@ -1,6 +1,6 @@
 # Pluto Takeaway
 
-A collection-only, multi-shop food ordering learning project. The current implementation provides public shop and menu browsing. Authentication, baskets and orders are planned, not implemented.
+A collection-only, multi-shop food ordering learning project. The current implementation provides public shop/menu browsing, Session login/logout and shop-admin reads/name updates restricted by role and ownership. Baskets, orders and full menu management are not implemented.
 
 ## Current stack
 
@@ -8,6 +8,7 @@ A collection-only, multi-shop food ordering learning project. The current implem
 - Spring Data JPA with Hibernate; MySQL Connector/J.
 - MySQL 8.4 in Docker Compose, published at `127.0.0.1:3307`.
 - Flyway schema migrations and development-only demo data.
+- Spring Security, BCrypt passwords, Session authentication, CSRF protection and Jakarta Validation.
 
 ## Prerequisites
 
@@ -77,7 +78,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.arguments=-
 Flyway applies the migrations before Hibernate validates entity mappings:
 
 - `src/main/resources/db/migration/V1__create_shop_menu_tables.sql`: schema.
-- `src/main/resources/dev/db/migration/V2__insert_demo_menu.sql`: demo data, selected only by the `dev` profile configuration.
+- `src/main/resources/dev/db/migration/V2__insert_demo_menu.sql`: demo menu data, selected only by `dev`.
+- `src/main/resources/db/migration/V3__create_user_account.sql`: account schema.
+- `src/main/resources/dev/db/migration/V4__insert_demo_accounts.sql`: demo accounts, selected only by `dev`.
+
+Production locations contain V1/V3; dev adds V2/V4. Test uses separate V2/V4 fixtures in its independent database. Migration versions need not be contiguous.
 
 Do not edit applied migration files. Add a new version for subsequent changes. Hibernate uses `ddl-auto: validate`, not schema creation/update.
 
@@ -103,7 +108,7 @@ SELECT version, description, success
 FROM flyway_schema_history ORDER BY installed_rank;
 ```
 
-Restart the backend. V1/V2 should remain recorded once each and the seed should not be inserted again. Empty-shop/ordering fixtures from the earlier exercise are not included in V2; see the demo guide.
+Restart the backend. V1/V2/V3/V4 should remain recorded once each and the seed should not be inserted again. Empty-shop/ordering fixtures from the earlier exercise are not included in V2; see the demo guide.
 
 ## Tests and verification status
 
@@ -113,11 +118,13 @@ From `Backend/pluto-takeaway`, with Java 21, Maven and Docker Desktop available:
 mvn test
 ```
 
-The test class activates `test`, imports a Spring-managed MySQL Testcontainer and uses MockMvc against real controllers/services/repositories. Service connection details select an independent container; no Compose startup, dev `.env` or `DB_PASSWORD` is required for tests. Flyway applies production V1 plus the test-only V2 fixture migration. Eight tests cover context startup, shop ordering, both menus and shop isolation, unavailable products, empty menus/categories, category ordering, HTTP 404 and HTTP 400. Tests do not start a listening Tomcat server.
+The test class activates `test`, imports a Spring-managed MySQL Testcontainer and uses MockMvc against real controllers/services/repositories. Service connection details select an independent container; no Compose startup, dev `.env` or `DB_PASSWORD` is required for tests. Flyway applies V1/V3 plus test-only V2/V4 fixtures. The current 43-test suite covers browsing, account/password mapping, real login and session reuse, logout, Session ID rotation, disabled login, role/ownership boundaries, CSRF, persisted shop-name updates, rejected writes, validation, ignored extra JSON fields and error JSON. Mutation tests reset affected fixture data before/after execution; do not enable parallel execution without redesigning this isolation. Tests do not start a listening Tomcat server.
 
 On 24 October 2026 the agent independently ran the suite successfully. On 25 October the developer reported the full `mvn test` suite also passed from a fresh GitHub clone: 8 tests, 0 failures, 0 errors. Maven caches may be reused; this is not a completely clean-machine certification. Manual application startup and Flyway restart were separately verified by the developer. See [Demo Guide](./Docs/Demo%20Guide.md) for provenance and limits.
 
-M1 public browsing is complete. Authentication and shop-scoped management are the next milestone. A uniform custom error response will be designed in M2; M1 retains framework-default error bodies with tested status codes.
+M1 and the bounded M2 backend scope are complete. M2 adds uniform JSON errors for the documented security, validation and resource-error cases; it does not promise a custom body for every possible framework error. The developer reports 43 tests passing, corroborated by the local Surefire report reviewed on 3 November 2026. The agent independently ran the earlier 40-test suite on 2 November. MockMvc does not verify real Tomcat cookie transport or idle expiration.
+
+See the [M2 API contract](./Docs/M2%20API%20Contract.md) and [demo guide](./Docs/Demo%20Guide.md) for the cookie/CSRF flow. Dev/test accounts `customer_a`, `customer_b`, `admin_a`, `admin_b` use the public fixture password `password`; admins own shops 1 and 2 respectively. Never reuse these demonstration credentials in deployment. Sessions are in memory, use a configured 30-minute inactivity timeout, HttpOnly and SameSite=Lax cookies; Secure cookies over deployment HTTPS remain deployment work.
 
 ## Stop and resume
 
@@ -128,5 +135,7 @@ From the repository root, `docker compose stop mysql` stops MySQL and `docker co
 - [Product scope](./Docs/Pluto%20Takeaway%20Scope%20%26%20Requirements.md)
 - [Milestones](./Docs/Pluto%20Takeaway%20Milestones.md)
 - [Data model](./Docs/Data%20Model/Data%20Model.md)
-- [API contract](./Docs/API%20Contract.md)
+- [Public browsing API contract](./Docs/API%20Contract.md)
+- [M2 authentication and ownership contract](./Docs/M2%20API%20Contract.md)
+- [Architecture decisions](./Docs/Decisions.md)
 - [Demo guide and evidence](./Docs/Demo%20Guide.md)
