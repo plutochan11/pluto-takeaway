@@ -13,6 +13,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfException;
 import tools.jackson.databind.json.JsonMapper;
 import jakarta.servlet.DispatcherType;
 
@@ -28,7 +29,8 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(
 		  HttpSecurity http,
 		  AuthService authService,
-		  JsonMapper jsonMapper
+		  JsonMapper jsonMapper,
+		  SecurityErrorResponseWriter errorWriter
 	) throws Exception {
 		http
 			  .authorizeHttpRequests(auth -> auth
@@ -58,17 +60,13 @@ public class SecurityConfig {
 					    jsonMapper.writeValue(response.getWriter(), currentUser);
 				    })
 				    .failureHandler((request, response, exception) -> {
-					    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-					    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-					    response.setCharacterEncoding("UTF-8");
-
-					    jsonMapper.writeValue(
-							response.getWriter(),
-							new ApiErrorResponse(
-								  "INVALID_CREDENTIALS",
-								  "Invalid username or password"
-							)
+					    errorWriter.write(
+							response,
+							HttpServletResponse.SC_UNAUTHORIZED,
+							"INVALID_CREDENTIALS",
+							"Invalid username or password"
 					    );
+
 				    })
 				    .permitAll()
 			  )
@@ -82,10 +80,30 @@ public class SecurityConfig {
 			  .exceptionHandling(errors -> errors
 				    .authenticationEntryPoint(
 						(request, response, exception) ->
-							  response.setStatus(
-								    HttpServletResponse.SC_UNAUTHORIZED
+							  errorWriter.write(
+								    response,
+								    HttpServletResponse.SC_UNAUTHORIZED,
+								    "AUTHENTICATION_REQUIRED",
+								    "Authentication is required"
 							  )
 				    )
+				    .accessDeniedHandler((request, response, exception) -> {
+					    if (exception instanceof CsrfException) {
+						    errorWriter.write(
+								response,
+								HttpServletResponse.SC_FORBIDDEN,
+								"CSRF_INVALID",
+								"CSRF token is missing or invalid"
+						    );
+					    } else {
+						    errorWriter.write(
+								response,
+								HttpServletResponse.SC_FORBIDDEN,
+								"ACCESS_DENIED",
+								"Access is denied"
+						    );
+					    }
+				    })
 			  );
 
 		return http.build();

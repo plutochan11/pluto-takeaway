@@ -22,6 +22,7 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import com.pluto.takeaway.dto.CsrfResponse;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -31,12 +32,11 @@ import java.io.UnsupportedEncodingException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -128,13 +128,19 @@ class PlutoTakeawayApplicationTests {
 	@Test
 	void shouldReturnNotFoundForUnknownShop() throws Exception {
 		mockMvc.perform(get("/api/shops/999999/menu"))
-			  .andExpect(status().isNotFound());
+			  .andExpect(status().isNotFound())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+			  .andExpect(jsonPath("$.message").value("Resource not found"));
 	}
 
 	@Test
 	void shouldRejectNonNumericShopId() throws Exception {
 		mockMvc.perform(get("/api/shops/not-a-number/menu"))
-			  .andExpect(status().isBadRequest());
+			  .andExpect(status().isBadRequest())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			  .andExpect(jsonPath("$.message").value("Request input is invalid"));
 	}
 
 	@Test
@@ -222,7 +228,10 @@ class PlutoTakeawayApplicationTests {
 	void shouldRequireAuthenticationForCurrentUser() throws Exception {
 
 		mockMvc.perform(get("/api/auth/me"))
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 	}
 
 	@Test
@@ -265,14 +274,19 @@ class PlutoTakeawayApplicationTests {
 						.param("password", "wrong_password")
 			  )
 			  .andExpect(status().isUnauthorized())
-			  .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
+			  .andExpect(jsonPath("$.message").value("Invalid username or password"));
 
 		// Get current user info without login
 		mockMvc.perform(
 				    get("/api/auth/me")
 						.session(session)
 			  )
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 	}
 
 	@Test
@@ -292,14 +306,20 @@ class PlutoTakeawayApplicationTests {
 						.param("username", "admin_a")
 						.param("password", "password")
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+			  .andExpect(jsonPath("$.message").value("CSRF token is missing or invalid"));
 
 		// Get current user info without login
 		mockMvc.perform(
 				    get("/api/auth/me")
 						.session(session)
 			  )
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 	}
 
 	@Test
@@ -323,14 +343,20 @@ class PlutoTakeawayApplicationTests {
 						.param("username", "admin_a")
 						.param("password", "password")
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+			  .andExpect(jsonPath("$.message").value("CSRF token is missing or invalid"));
 
 		// Get current user info
 		mockMvc.perform(
 				    get("/api/auth/me")
 						.session(session)
 			  )
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 	}
 
 	@Test
@@ -414,7 +440,10 @@ class PlutoTakeawayApplicationTests {
 		assertThat(authenticatedSession.isInvalid()).isTrue();
 
 		mockMvc.perform(get("/api/auth/me"))
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 	}
 
 	@Test
@@ -454,7 +483,10 @@ class PlutoTakeawayApplicationTests {
 				    post("/api/auth/logout")
 						.session(authenticatedSession)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+			  .andExpect(jsonPath("$.message").value("CSRF token is missing or invalid"));
 
 		assertThat(authenticatedSession.isInvalid()).isFalse();
 
@@ -475,7 +507,10 @@ class PlutoTakeawayApplicationTests {
 
 		// Access admin shop without login
 		mockMvc.perform(get("/api/admin/shops/1"))
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 	}
 
 	@Test
@@ -496,7 +531,10 @@ class PlutoTakeawayApplicationTests {
 				    get("/api/admin/shops/1")
 						.session(authenticatedSession)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+			  .andExpect(jsonPath("$.message").value("Access is denied"));
 	}
 
 	@Test
@@ -527,7 +565,10 @@ class PlutoTakeawayApplicationTests {
 				    get("/api/admin/shops/2")
 						.session(authenticatedSession)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+			  .andExpect(jsonPath("$.message").value("Access is denied"));
 	}
 
 	@Test
@@ -572,7 +613,10 @@ class PlutoTakeawayApplicationTests {
 				    get("/api/admin/shops/1")
 						.session(authenticatedSession)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+			  .andExpect(jsonPath("$.message").value("Access is denied"));
 	}
 
 	@Test
@@ -653,7 +697,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestJson)
 			  )
-			  .andExpect(status().isUnauthorized());
+			  .andExpect(status().isUnauthorized())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+			  .andExpect(jsonPath("$.message").value("Authentication is required"));
 
 		assertShopNamesUnchanged();
 	}
@@ -697,7 +744,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestJson)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+			  .andExpect(jsonPath("$.message").value("Access is denied"));
 
 		assertShopNamesUnchanged();
 	}
@@ -741,7 +791,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestJson)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+			  .andExpect(jsonPath("$.message").value("Access is denied"));
 
 		assertShopNamesUnchanged();
 	}
@@ -767,7 +820,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestJson)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+			  .andExpect(jsonPath("$.message").value("CSRF token is missing or invalid"));
 
 		assertShopNamesUnchanged();
 	}
@@ -805,7 +861,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestJson)
 			  )
-			  .andExpect(status().isForbidden());
+			  .andExpect(status().isForbidden())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("CSRF_INVALID"))
+			  .andExpect(jsonPath("$.message").value("CSRF token is missing or invalid"));
 
 		assertShopNamesUnchanged();
 	}
@@ -832,7 +891,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{}")
 			  )
-			  .andExpect(status().isBadRequest());
+			  .andExpect(status().isBadRequest())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			  .andExpect(jsonPath("$.message").value("Request validation failed"));
 
 		assertShopNamesUnchanged();
 	}
@@ -861,7 +923,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestBody)
 			  )
-			  .andExpect(status().isBadRequest());
+			  .andExpect(status().isBadRequest())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			  .andExpect(jsonPath("$.message").value("Request validation failed"));
 
 		assertShopNamesUnchanged();
 	}
@@ -890,7 +955,10 @@ class PlutoTakeawayApplicationTests {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(requestBody)
 			  )
-			  .andExpect(status().isBadRequest());
+			  .andExpect(status().isBadRequest())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			  .andExpect(jsonPath("$.message").value("Request validation failed"));
 
 		assertShopNamesUnchanged();
 	}
@@ -920,6 +988,9 @@ class PlutoTakeawayApplicationTests {
 						.content(requestBody)
 			  )
 			  .andExpect(status().isBadRequest())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			  .andExpect(jsonPath("$.message").value("Request validation failed"))
 			  .andExpect(result ->
 				    assertThat(result.getResolvedException())
 						.isInstanceOf(MethodArgumentNotValidException.class));
@@ -953,6 +1024,83 @@ class PlutoTakeawayApplicationTests {
 			  )
 			  .andExpect(status().isOk())
 			  .andExpect(jsonPath("$.name").value("a".repeat(100)));
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectMalformedShopUpdateJson() throws Exception {
+		MockHttpSession authenticatedSession = logInAsAdminA();
+		CsrfResponse csrf = getCsrf(authenticatedSession);
+
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(authenticatedSession)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"name\":")
+			  )
+			  .andExpect(status().isBadRequest())
+			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			  .andExpect(jsonPath("$.message").value("Request input is invalid"))
+			  .andExpect(result ->
+				    assertThat(result.getResolvedException())
+						.isInstanceOf(HttpMessageNotReadableException.class));
+
+		assertShopNamesUnchanged();
+	}
+
+	@Test
+	@Sql("/test-data/reset-shop-names.sql")
+	@Sql(
+		  scripts = "/test-data/reset-shop-names.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldIgnoreUnknownFieldsWhenUpdatingShop() throws Exception {
+
+		MockHttpSession session = logInAsAdminA();
+
+		CsrfResponse csrf = getCsrf(session);
+
+		String requestBody = """
+			  {
+			      "name": "Pluto Kitchen Renamed",
+			      "id": 2,
+			      "shopId": 2,
+			      "status": "CLOSED"
+			  }
+			  """;
+
+		mockMvc.perform(
+				    patch("/api/admin/shops/1")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody)
+			  )
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.id").value(1L))
+			  .andExpect(jsonPath("$.name").value("Pluto Kitchen Renamed"))
+			  .andExpect(jsonPath("$.status").value("OPEN"));
+
+		Shop shop1 = shopRepository.findById(1L).orElseThrow();
+		Shop shop2 = shopRepository.findById(2L).orElseThrow();
+
+		assertThat(shop1.getName()).isEqualTo("Pluto Kitchen Renamed");
+		assertThat(shop1.getStatus()).isEqualTo("OPEN");
+
+		assertThat(shop2.getName()).isEqualTo("Harbour Cafe");
+		assertThat(shop2.getStatus()).isEqualTo("OPEN");
+
+		assertThat(
+			  userAccountRepository.findByUsername("admin_a")
+				    .orElseThrow()
+				    .getShopId()
+		).isEqualTo(1L);
 	}
 
 	@Test
