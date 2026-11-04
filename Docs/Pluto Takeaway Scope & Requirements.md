@@ -127,18 +127,18 @@ Proposed concurrency rule: checkout consumes a defined version or set of basket 
 
 ### 7.2 Meal selections and pricing
 
-Proposed initial model: a meal deal has a base price and required option groups. Each group requires exactly one selection. A fixed component can be represented by a required group containing one option. An option may carry an additional charge.
+Confirmed on 3 November 2026 in ADR-002: a meal deal has a base price and required option groups. Each group requires exactly one selection. A fixed component can be represented by a required group containing one option. An option may carry an additional charge.
 
 Example: a HK$58 lunch includes one main and one drink; a particular drink adds HK$3.
 
 - Reject missing groups, duplicate selections, invalid options and options belonging to another shop.
 - Calculate the price on the server: base price plus selected supplements, multiplied by quantity.
-- Price meal supplements independently of standalone product prices; a standalone price change does not automatically change a meal price. This policy requires confirmation.
+- Price meal supplements independently of standalone product prices; a standalone price change does not automatically change a meal price. This policy is confirmed in ADR-002.
 - Prevent selection of withdrawn options. If a required group has no available options, the meal cannot be ordered.
 - Treat different configurations of the same meal as distinct basket lines.
 - Save the purchased configuration in the order snapshot.
 
-Proposed monetary policy: HKD only, exact decimal arithmetic and an explicit rounding rule. Positive quantity limits will be defined in the API contract.
+Confirmed monetary policy: HKD only; nonnegative base prices/supplements with at most two fractional digits; reject higher precision. Use exact decimal arithmetic for addition and integer multiplication, requiring no rounding in this model. Quantity is an integer 1–99 per configuration line. Discounts, taxes and division-based pricing are outside this baseline; see ADR-002. Schema precision and overflow limits remain to be defined.
 
 ### 7.3 Price and availability changes
 
@@ -290,11 +290,13 @@ Existing implementation choices are references, not requirements to reproduce ol
 | DEC-11 | 22 October 2026 | M1 menu displays unavailable products with status; implemented | Preserve menu visibility; later checkout must independently reject unavailable selections |
 | DEC-12 | 25 October 2026 | Use server-side Session authentication for M2; confirmed | Focus on authentication, authorisation and shop ownership; lifecycle and API defaults documented for implementation review in ADR-001 |
 
+| DEC-13 | 3 November 2026 | Accept bounded meal selections and independent supplements | One choice per required group; server pricing; HKD; quantity 1–99; details in ADR-002 |
+
 ## 13. Open decisions and next steps
 
 | ID | Question | When to resolve |
 |---|---|---|
-| OPEN-01 | Accept the proposed one-choice-per-group meal model and independent supplements? | Before meal schema and API design |
+| OPEN-01 — resolved | Exactly one choice per required group, independent supplements, HKD two-decimal inputs and quantity 1–99; see ADR-002. | Confirmed 3 November 2026; implementation pending |
 | OPEN-02 | How does simulated payment interact with order creation, and are failure cases required? | Before checkout implementation |
 | OPEN-03 | When should a same-shop repeat-purchase warning appear? | Before checkout interface design |
 | OPEN-04 | What freshness target is required for changes on an already open page? | Before choosing polling or push notifications |

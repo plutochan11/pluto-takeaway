@@ -131,7 +131,7 @@ Valid actors can authenticate and perform permitted actions. Role checks and res
 
 ### Tasks, in execution order
 
-- [ ] **M3.1 — Fix the meal rules before schema work.** Resolve OPEN-01: recommended first model is one required choice per group, optional supplements priced independently of standalone product prices, and no nested meals. Record a HK$58 meal with a HK$3 drink supplement as an example, including quantity calculation. Define money rounding, positive quantity bounds and behaviour when every option in a required group is unavailable.
+- [x] **M3.1 — Fix the meal rules before schema work.** Resolve OPEN-01: recommended first model is one required choice per group, optional supplements priced independently of standalone product prices, and no nested meals. Record a HK$58 meal with a HK$3 drink supplement as an example, including quantity calculation. Define money rounding, positive quantity bounds and behaviour when every option in a required group is unavailable.
 - [ ] **M3.2 — Complete basic management.** Add shop details/open-status updates, category management and product create/update/withdraw operations. Validate required names, nonnegative prices, allowed status values and same-shop category ownership. Prefer withdrawal/archiving to deleting records later needed for order history. Apply M2 ownership checks to every operation, including list/detail reads.
 - [ ] **M3.3 — Implement the meal model and validation.** Add migrations for meals, groups and options with clear shop ownership. Implement administrator maintenance and public menu responses. Validate group/option membership and reject foreign-shop references, duplicate choices and missing required choices. Centralise the selection and price calculation so baskets and checkout can reuse the same rules.
 - [ ] **M3.4 — Decide and implement basic image handling.** Record whether this release includes uploaded images, as proposed in the scope, or deliberately uses seeded image references. If uploads are included, constrain size/type, generate safe storage names, configure storage externally, enforce administrator access and document local setup. Do not add cloud infrastructure solely for this task. If deferred, record the explicit scope adjustment and use valid demo references.
@@ -307,7 +307,7 @@ Copy a row for each completed task or milestone. Record exact commands/results r
 ### What to do next
 
 1. Review and commit the M2 completion documentation separately from application code.
-2. Start M3.1: agree meal groups/options, required selections, supplements, quantity and money rules using worked examples.
+2. M3.1 policy is accepted in ADR-002 (3 November 2026); design meal/group/option relationships and the next bounded management slice before migrations.
 3. Write the M3 model/API contract before migrations; then implement one bounded management slice at a time.
 
 M1 completion evidence, 25 October 2026:
@@ -330,3 +330,5 @@ M2 completion evidence, 3 November 2026:
 - M2.1–M2.5 core completion gate met. Session idle timeout and HttpOnly/SameSite are configured; actual timeout, old-cookie replay, fresh M2 setup and HTTPS deployment cookie behaviour are not claimed tested. See M2 contract and Demo Guide for exact limits.
 - Completed implementation commits include `e217f43` role/ownership, `0a48fd0` shop-name updates, `62d65e4` error responses and `2b6ee23` Session lifecycle. Documentation work performs no Git staging/commit/push.
 - M3 menu management, configurable meals, baskets and orders remain incomplete. Cross-shop management evidence applies to current shop endpoints only, not future resources.
+
+M3.1 policy checkpoint, 3 November 2026: Pluto accepted ADR-002: exactly one choice per required group, independent supplements, same-shop membership, unavailable-group rejection, HKD two-decimal prices and quantity 1–99. Worked examples record unit and line totals. This marks policy agreement only; meal schema and application code are not implemented.
