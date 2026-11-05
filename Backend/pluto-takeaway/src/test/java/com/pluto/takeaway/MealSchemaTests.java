@@ -1,5 +1,12 @@
 package com.pluto.takeaway;
 
+import com.pluto.takeaway.entity.Meal;
+import com.pluto.takeaway.entity.MealOption;
+import com.pluto.takeaway.entity.MealOptionGroup;
+import com.pluto.takeaway.repository.MealRepository;
+import com.pluto.takeaway.repository.MealOptionGroupRepository;
+import com.pluto.takeaway.repository.MealOptionRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +32,15 @@ class MealSchemaTests {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private MealRepository meals;
+
+    @Autowired
+    private MealOptionGroupRepository groups;
+
+    @Autowired
+    private MealOptionRepository options;
 
     @BeforeEach
     void createTwoShopMealStructures() {
@@ -115,6 +131,77 @@ class MealSchemaTests {
                 .isEqualTo(3819))
             .hasMessageContaining("chk_meal_option_supplement");
         assertThat(optionCount()).isZero();
+    }
+
+    @Test
+    void shouldMapMealsAndFilterByShopInIdOrder() {
+        jdbc.update("""
+            INSERT INTO meal (id, shop_id, category_id, name, base_price, status)
+            VALUES (88000, 1, 10, 'Earlier Meal A', 61.25, 'AVAILABLE')
+            """);
+
+        var result = meals.findByShopIdOrderByIdAsc(1L);
+        assertThat(result).extracting(Meal::getId).containsExactly(88000L, 88001L);
+        Meal meal = result.getFirst();
+        assertThat(meal.getShopId()).isEqualTo(1L);
+        assertThat(meal.getCategoryId()).isEqualTo(10L);
+        assertThat(meal.getName()).isEqualTo("Earlier Meal A");
+        assertThat(meal.getBasePrice()).isEqualByComparingTo("61.25");
+        assertThat(meal.getStatus()).isEqualTo("AVAILABLE");
+        assertThat(meals.findByShopIdOrderByIdAsc(2L))
+            .extracting(Meal::getId).containsExactly(88002L);
+    }
+
+    @Test
+    void shouldMapGroupsAndApplyParentScopeAndStableOrdering() {
+        jdbc.update("UPDATE meal_option_group SET sort_order = 20 WHERE id = 88101");
+        jdbc.update("""
+            INSERT INTO meal_option_group (id, shop_id, meal_id, name, sort_order)
+            VALUES (88104, 1, 88001, 'Second tie', 10),
+                   (88103, 1, 88001, 'First tie', 10)
+            """);
+
+        var result = groups.findByShopIdAndMealIdOrderBySortOrderAscIdAsc(1L, 88001L);
+        assertThat(result).extracting(MealOptionGroup::getId)
+            .containsExactly(88103L, 88104L, 88101L);
+        MealOptionGroup group = result.getFirst();
+        assertThat(group.getShopId()).isEqualTo(1L);
+        assertThat(group.getMealId()).isEqualTo(88001L);
+        assertThat(group.getName()).isEqualTo("First tie");
+        assertThat(group.getSortOrder()).isEqualTo(10);
+        assertThat(groups.findByShopIdAndMealIdOrderBySortOrderAscIdAsc(2L, 88001L)).isEmpty();
+        assertThat(groups.findByShopIdAndMealIdOrderBySortOrderAscIdAsc(1L, 88002L)).isEmpty();
+    }
+
+    @Test
+    void shouldMapBothOptionShapesAndApplyParentScopeAndStableOrdering() {
+        jdbc.update("""
+            INSERT INTO meal_option
+                (id, shop_id, group_id, product_id, label, supplement, status, sort_order)
+            VALUES (88203, 1, 88101, NULL, 'No Drink', 0.00, 'AVAILABLE', 10),
+                   (88202, 1, 88101, 100, NULL, 3.25, 'AVAILABLE', 10),
+                   (88201, 1, 88101, 100, NULL, 5.00, 'UNAVAILABLE', 20),
+                   (88204, 2, 88102, 200, NULL, 2.00, 'AVAILABLE', 0)
+            """);
+
+        var result = options.findByShopIdAndGroupIdOrderBySortOrderAscIdAsc(1L, 88101L);
+        assertThat(result).extracting(MealOption::getId)
+            .containsExactly(88202L, 88203L, 88201L);
+        MealOption productOption = result.getFirst();
+        assertThat(productOption.getShopId()).isEqualTo(1L);
+        assertThat(productOption.getGroupId()).isEqualTo(88101L);
+        assertThat(productOption.getProductId()).isEqualTo(100L);
+        assertThat(productOption.getLabel()).isNull();
+        assertThat(productOption.getSupplement()).isEqualByComparingTo("3.25");
+        assertThat(productOption.getStatus()).isEqualTo("AVAILABLE");
+        assertThat(productOption.getSortOrder()).isEqualTo(10);
+        MealOption noDrink = result.get(1);
+        assertThat(noDrink.getProductId()).isNull();
+        assertThat(noDrink.getLabel()).isEqualTo("No Drink");
+        assertThat(noDrink.getSupplement()).isEqualByComparingTo("0.00");
+        assertThat(result.get(2).getStatus()).isEqualTo("UNAVAILABLE");
+        assertThat(options.findByShopIdAndGroupIdOrderBySortOrderAscIdAsc(2L, 88101L)).isEmpty();
+        assertThat(options.findByShopIdAndGroupIdOrderBySortOrderAscIdAsc(1L, 88102L)).isEmpty();
     }
 
     private void assertInvalidShape(Long productId, String label, String supplement) {
