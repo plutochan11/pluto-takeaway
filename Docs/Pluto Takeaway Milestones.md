@@ -47,7 +47,7 @@ Use a layered monolith with Java, Spring Boot, Spring Data JPA/Hibernate and MyS
 
 The tasks below are an actionable implementation proposal. They do not silently confirm the scope's open business decisions. Where a task depends on an open decision, resolve and record that choice at its stated checkpoint before implementing the dependent behaviour.
 
-A small demonstration interface is planned in M7. A production storefront, microservices, inventory reservation, advanced promotions and forecasting are outside this release. Reporting, caching and push notifications are optional after the core release.
+A small demonstration interface is planned in M7. A production storefront, microservices, inventory reservation, advanced promotions and forecasting are outside this release. Reporting and push notifications are optional after the core release. Redis cache-aside for public shop menus is planned between M3 and M4.
 
 ## 3. Starting point and source of truth
 
@@ -140,6 +140,12 @@ Valid actors can authenticate and perform permitted actions. Role checks and res
 ### Completion gate
 
 A can update its own menu and cannot modify B's resources. Public reads reflect saved changes. Meal totals are deterministic, server-calculated and backed by validation tests. The agreed image scope is documented and demonstrable.
+
+### After M3 — Redis cache-aside for public shop menus
+
+- [ ] Measure the uncached public menu read. After M3 menu management and public meal responses are ready, add a Redis cache keyed by shop ID with a TTL.
+- [ ] On a miss, read the menu from MySQL and populate Redis. After a successful menu update commits, invalidate the affected shop's key. Define how public reads behave if Redis is unavailable.
+- [ ] Verify hits, misses, shop isolation, expiry, invalidation and fallback. Record the observed behavior and measurements for the portfolio.
 
 ## 8. M4 — Persistent multi-shop baskets
 
@@ -282,7 +288,6 @@ These do not count as unfinished core-release work. Promote an item only after r
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | O1 — Basic sales reporting      | Define business timezone and half-open date ranges; aggregate completed orders by shop; separate item quantity, distinct order count and simulated order value; use purchased snapshots; avoid counting meal/component value twice; expose a protected report and a simple view | Known seeded totals match the report; range boundaries, cancelled/rejected exclusion and cross-shop denial tested |
 | O2 — Faster change notification | If the baseline freshness policy is insufficient, choose polling/SSE using a specific target; implement shop-scoped updates, reconnect refresh and stale-view recovery                                                                                                          | Measured latency meets the target; disconnect recovery works; checkout tests still pass                           |
-| O3 — Menu caching               | Measure uncached reads first; define shop-specific keys, invalidation after writes and cache-failure behaviour; add caching only for a measured need                                                                                                                            | Before/after measurements plus isolation, invalidation and fallback tests; no unsupported performance claim       |
 
 Delivery, real payment, stock reservation, cross-shop checkout, nested meals and forecasting remain excluded. An optional reporting view must label values as simulated order value, not actual settled revenue.
 

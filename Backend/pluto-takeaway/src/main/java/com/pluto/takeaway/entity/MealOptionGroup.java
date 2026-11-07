@@ -44,4 +44,21 @@ public class MealOptionGroup {
 	public Integer getSortOrder() {
 		return sortOrder;
 	}
+
+	public static MealOptionGroup create(
+		  Long shopId,
+		  Long mealId,
+		  String name,
+		  Integer sortOrder
+	) {
+
+		MealOptionGroup group = new MealOptionGroup();
+		
+		group.shopId = shopId;
+		group.mealId = mealId;
+		group.name = name;
+		group.sortOrder = sortOrder;
+
+		return group;
+	}
 }

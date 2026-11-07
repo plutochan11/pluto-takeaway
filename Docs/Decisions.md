@@ -110,3 +110,47 @@ The category is a display grouping, not a restriction on which products the meal
 ### Consequences
 
 Add category_id to Meal and enforce (shop_id, category_id) against the existing Category (shop_id, id) key, following the product ownership pattern. Existing public menu response compatibility and ordering between products/meals remain API design work. No category or product migrations already applied are edited to implement this policy.
+
+## ADR-005 — Atomic complete-meal creation and monetary input limits
+
+Date: 5 November 2026. Status: atomic-creation workflow superseded by ADR-006 before implementation. Monetary input limits remain accepted. The text below preserves the original rationale and proposal.
+
+Pluto prefers one request containing the complete meal, its groups and options. Adopt this approach: existing schema already represents the hierarchy; nested validation and atomic persistence add manageable complexity. Split development into small tasks without requiring API clients to perform separate parent/child creation requests. Subsequent editing/publication APIs remain separate design work.
+
+Use one service transaction. Validate actor ownership, category ownership, all referenced products and nested input before writes where practical. Persist meal, groups and options with server-generated IDs, deriving child ownership and parent references on the server. If any write fails, roll back the entire creation; generated IDs may still have gaps after rollback.
+
+Base price and each option supplement are nonnegative HKD amounts with at most two fractional digits and an API maximum of 9,999.99 inclusive. Non-product options still require zero supplement. Storage remains DECIMAL(10,2); no migration is required for the smaller input cap. Limits on calculated unit/line totals and request collection sizes remain follow-up design items, not implied by this per-amount cap.
+
+The creation slice retains explicit UNAVAILABLE initial state for meal and options, consistent with the schema's safe defaults. Complete structure does not automatically mean published or purchasable. Activation/public menu behaviour is not implemented by creation. Referenced unavailable products may be configured, but cannot later pass purchase eligibility. The detailed API design is maintained in [M3 API Contract](./M3%20API%20Contract.md).
+
+
+## ADR-006 — Incremental meal management with frontend orchestration
+
+Date: 5 November 2026. Status: superseded before implementation by ADR-007. This entry preserves the incremental workflow considered during design; ADR-005's monetary cap remains accepted.
+
+### Context and decision
+
+A single UI action does not require a single backend endpoint. Pluto chooses separate creation operations for meal, group and option. The frontend can collect a complete form and orchestrate these requests behind one Create action, while the backend offers smaller operations usable during later editing.
+
+Create the unavailable meal first and retain its returned ID; create each group under that meal and retain each group ID; create options under the correct group. These dependencies require ordering; do not fire all requests concurrently before parent IDs exist. Same-level parallelism is optional later and is not required for this learning implementation.
+
+### Partial failure and safety
+
+Each request has its own transaction. Successful earlier requests remain committed if a later request fails; frontend orchestration is not a database transaction across HTTP calls. Retain the created IDs and display the incomplete state/error so the admin can continue configuring that meal rather than blindly recreating it. A network timeout may have an unknown commit outcome; automatic POST retries and idempotency are not promised by this baseline and require read/reconciliation support before a complete frontend wizard.
+
+The meal stays UNAVAILABLE during setup. Publication must be explicit and validate the complete effective configuration; no completion inference from frontend success alone. The first create-meal endpoint may legitimately persist a meal with no groups/options. Initial option availability and activation/editing details must be specified in their own slices. No automatic destructive compensation of already-created records is added.
+
+### Consequences
+
+More HTTP calls and intermediate records, but simpler bounded DTOs/services and reusable management operations. Server-side role, target-shop ownership and parent-child membership are checked for every operation independently. A failed option creation must not corrupt its own request's data; it does not roll back the meal/group creation requests. Current schema requires no change for this workflow.
+
+
+## ADR-007 — Final complete-meal creation boundary
+
+Date: 5 November 2026. Status: confirmed by Pluto; implementation pending. Supersedes ADR-006. Reaffirms ADR-005's atomic creation and monetary policy.
+
+Create a complete Meal with its required groups and options through one POST request and one service transaction. This matches the desired business operation: either all new records are committed or none are. The modest nested validation/persistence complexity is preferable to coordinating partial creation across HTTP requests for this project. The atomic boundary does not require one oversized method: DTO validation, access checks, product lookup and entity creation may be factored into focused helpers.
+
+Initial meal and option statuses remain server-controlled UNAVAILABLE in this creation slice. Explicit activation and later editing are separate operations; creation does not publish the meal. Preserve the accepted HKD 9,999.99 maximum for each base-price/supplement input, nonnegative two-decimal values and zero supplement for non-product choices.
+
+Frontend still handles validation failures and network errors. A committed response lost in transit is not resolved by database atomicity; retry/idempotency or reconciliation is follow-up work. No separate group/option creation endpoints are required for the first complete-create slice. Detailed current contract: [M3 API Contract](./M3%20API%20Contract.md).

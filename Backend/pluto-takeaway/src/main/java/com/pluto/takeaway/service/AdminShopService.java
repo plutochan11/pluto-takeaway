@@ -2,33 +2,24 @@ package com.pluto.takeaway.service;
 
 import com.pluto.takeaway.dto.ShopResponse;
 import com.pluto.takeaway.entity.Shop;
-import com.pluto.takeaway.entity.UserAccount;
 import com.pluto.takeaway.repository.ShopRepository;
 import com.pluto.takeaway.repository.UserAccountRepository;
-import org.jspecify.annotations.NonNull;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
-
-import java.util.Objects;
 
 @Service
 public class AdminShopService {
 
-	private final UserAccountRepository userAccountRepository;
+	private final ShopAccessService shopAccessService;
 
-	private final ShopRepository shopRepository;
-
-	public AdminShopService(UserAccountRepository userAccountRepository, ShopRepository shopRepository) {
-		this.userAccountRepository = userAccountRepository;
-		this.shopRepository = shopRepository;
+	public AdminShopService(ShopAccessService shopAccessService) {
+		this.shopAccessService = shopAccessService;
 	}
 
 	@Transactional(readOnly = true)
 	public ShopResponse getOwnShop(String username, Long shopId) {
 
-		Shop shop = findOwnedShop(username, shopId);
+		Shop shop = shopAccessService.requireOwnedShop(username, shopId);
 
 		return new ShopResponse(
 			  shop.getId(),
@@ -44,7 +35,7 @@ public class AdminShopService {
 		  String name
 	) {
 
-		Shop shop = findOwnedShop(username, shopId);
+		Shop shop = shopAccessService.requireOwnedShop(username, shopId);
 
 		shop.rename(name);
 
@@ -55,27 +46,5 @@ public class AdminShopService {
 		);
 	}
 
-	private @NonNull Shop findOwnedShop(String username, Long shopId) {
 
-		// Find user account with username
-		// Return 401 if not found
-		UserAccount userAccount = userAccountRepository.findByUsername(username)
-			  .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-
-		// Check if account role is SHOP_ADMIN
-		// Return 403 if not
-		if (!Objects.equals("SHOP_ADMIN", userAccount.getRole())) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-		}
-
-		// Check if they own this shop
-		// Return 403 if not
-		if (!Objects.equals(shopId, userAccount.getShopId())) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-		}
-
-		// Find shop
-		return shopRepository.findById(userAccount.getShopId())
-			  .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-	}
 }

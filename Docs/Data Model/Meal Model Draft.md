@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Created / updated | 3 November 2026 / 4 November 2026 |
+| Created / updated | 3 November 2026 / 5 November 2026 |
 | Milestone | M3 — configurable meals |
-| Status | Completed logical draft based on accepted rules; physical schema and APIs pending |
+| Status | Logical model with V5 schema and JPA mappings implemented; management APIs in design |
 | Business rules | [ADR-002](../Decisions.md#adr-002--bounded-meal-selections-and-independent-supplements) |
 | Option design | [ADR-003](../Decisions.md#adr-003--product-backed-meal-options-and-explicit-non-product-choices) |
 | Category placement | [ADR-004](../Decisions.md#adr-004--reuse-shop-categories-for-meals) |
@@ -161,9 +161,9 @@ If Coffee product 3004 becomes unavailable, option 1204 cannot be selected; its 
 | Question | Proposal / next action | Status |
 |---|---|---|
 | How will meals appear under categories? | Reuse Category; exactly one same-shop category per meal; see ADR-004 | Resolved 4 November 2026 |
-| Ownership columns and composite constraints | Choose physical columns after logical review; enforce option/product same-shop consistency rather than relying on independent FKs | Schema design pending |
-| Monetary storage and overflow | Choose precision and maximum supported base/supplement/unit/line totals; ADR only fixes scale, arithmetic and quantity bounds | Schema/API design pending |
-| Administration and publication | Define safe setup flow and purchase eligibility for incomplete meals; stored AVAILABLE is not sufficient | API design pending |
+| Ownership columns and composite constraints | V5 adds shop_id through the hierarchy and composite FKs; see Meal Schema Proposal | Implemented and constraint-tested |
+| Monetary storage and overflow | DECIMAL(10,2) implemented; ADR-005 confirms API base/supplement cap 9,999.99. Calculated unit/line-total caps remain open | Schema/API design pending |
+| Administration and publication | Atomic complete-meal creation confirmed in ADR-007, superseding the unimplemented incremental proposal; endpoint design in [M3 API Contract](../M3%20API%20Contract.md); stored AVAILABLE is not sufficient | API design pending |
 | Menu response compatibility | Decide how meals are exposed alongside existing products without silently breaking M1 responses | API design pending |
 
 ## 7. Review record
@@ -171,3 +171,5 @@ If Coffee product 3004 becomes unavailable, option 1204 cannot be selected; its 
 On 4 November 2026 the assistant completed this logical draft from accepted ADR-002/003 at Pluto's request. Examples and relationships were checked for same-shop membership, correct group references and the documented totals. No schema migration or application implementation is claimed. Draft field choices and open items still require physical/API design review.
 
 Category placement was confirmed in ADR-004 on 4 November 2026. Physical details are proposed in [Meal Schema Proposal](./Meal%20Schema%20Proposal.md); they are not an applied migration.
+
+5 November 2026: V5 schema and JPA mappings are now implemented; the full 53-test suite passed on 4 November. Earlier review notes above describe their state at the time. The current next work is the proposed M3 creation API, not a repeat of schema implementation.

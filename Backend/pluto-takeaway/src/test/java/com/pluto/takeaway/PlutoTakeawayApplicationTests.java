@@ -1,17 +1,19 @@
 package com.pluto.takeaway;
 
-import com.pluto.takeaway.dto.UpdateShopRequest;
+import com.pluto.takeaway.dto.*;
 import com.pluto.takeaway.entity.Shop;
 import com.pluto.takeaway.entity.UserAccount;
 import com.pluto.takeaway.repository.ShopRepository;
 import com.pluto.takeaway.repository.UserAccountRepository;
 import com.pluto.takeaway.security.AccountUserDetailsService;
+import com.pluto.takeaway.service.AdminMealService;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -20,7 +22,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
-import com.pluto.takeaway.dto.CsrfResponse;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpSession;
@@ -29,6 +30,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.UnsupportedEncodingException;
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -58,6 +62,12 @@ class PlutoTakeawayApplicationTests {
 
 	@Autowired
 	private ShopRepository shopRepository;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	private AdminMealService adminMealService;
 
 	@Test
 	void shouldReturnShopOneMenu() throws Exception {
@@ -1159,6 +1169,278 @@ class PlutoTakeawayApplicationTests {
 			  .andExpect(status().isUnauthorized())
 			  .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
 			  .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+	}
+
+	@Test
+	@Sql(
+		  scripts = "/test-data/cleanup-created-meal.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldCreateCompleteMealForOwnedShop() throws Exception {
+
+		MockHttpSession session = logInAsAdminA();
+
+		CsrfResponse csrf = getCsrf(session);
+		MvcResult result = mockMvc.perform(
+				    post("/api/admin/shops/1/meals")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+							  {
+							        "categoryId": 10,
+							        "name": "Create Meal Integration Fixture",
+							        "basePrice": 58.00,
+							        "groups": [{
+							              "name": "Choice",
+							              "sortOrder": 10,
+							              "options": [
+							                    {
+							                          "label": "No Drink",
+							                          "supplement": 0.00,
+							                          "sortOrder": 20
+							                    },
+							                    {
+							                          "productId": 100,
+							                          "supplement": 3.00,
+							                          "sortOrder": 10
+							                    }
+							              ]
+							        }]
+							  }
+							  """)
+			  )
+			  .andExpect(status().isCreated())
+			  .andExpect(jsonPath("$.shopId").value(1))
+			  .andExpect(jsonPath("$.categoryId").value(10))
+			  .andExpect(jsonPath("$.status").value("UNAVAILABLE"))
+			  .andExpect(jsonPath("$.groups[0].options.length()").value(2))
+			  .andExpect(jsonPath("$.groups[0].options[0].name").value("Chicken Rice"))
+			  .andExpect(jsonPath("$.groups[0].options[0].supplement").value(3.0))
+			  .andExpect(jsonPath("$.groups[0].options[1].name").value("No Drink"))
+			  .andExpect(jsonPath("$.groups[0].options[1].productId").value(nullValue()))
+			  .andReturn();
+
+		MealResponse response = jsonMapper.readValue(
+			  result.getResponse().getContentAsString(),
+			  MealResponse.class
+		);
+
+		Long mealId = response.id();
+
+		MealGroupResponse group = response.groups().getFirst();
+
+		Long savedShopId = jdbcTemplate.queryForObject(
+			  "SELECT shop_id FROM meal where id = ?",
+			  Long.class,
+			  mealId
+		);
+
+		assertThat(savedShopId).isEqualTo(1L);
+
+		Long savedMealId = jdbcTemplate.queryForObject(
+			  "SELECT meal_id FROM meal_option_group WHERE id = ?",
+			  Long.class,
+			  group.id()
+		);
+
+		assertThat(savedMealId).isEqualTo(mealId);
+
+		List<Long> savedOptionIds = jdbcTemplate.queryForList(
+			  "SELECT id from meal_option WHERE group_id = ?",
+			  Long.class,
+			  group.id()
+		);
+
+		assertThat(savedOptionIds).containsExactlyInAnyOrder(
+			  group.options().get(0).id(),
+			  group.options().get(1).id()
+		);
+	}
+
+	@Test
+	void shouldRejectMealWithForeignShopProduct() throws Exception {
+
+		MockHttpSession session = logInAsAdminA();
+
+		CsrfResponse csrf = getCsrf(session);
+		mockMvc.perform(
+				    post("/api/admin/shops/1/meals")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+							  {
+							        "categoryId": 10,
+							        "name": "Rejected Foreign Product Fixture",
+							        "basePrice": 58.00,
+							        "groups": [{
+							              "name": "Choice",
+							              "sortOrder": 10,
+							              "options": [
+							                    {
+							                          "label": "No Drink",
+							                          "supplement": 0.00,
+							                          "sortOrder": 20
+							                    },
+							                    {
+							                          "productId": 200,
+							                          "supplement": 3.00,
+							                          "sortOrder": 10
+							                    }
+							              ]
+							        }]
+							  }
+							  """)
+			  )
+			  .andExpect(status().isForbidden())
+			  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+		Long savedMeals = jdbcTemplate.queryForObject(
+			  "SELECT COUNT(*) FROM meal WHERE shop_id = ? AND name = ?",
+			  Long.class,
+			  1L,
+			  "Rejected Foreign Product Fixture"
+		);
+
+		assertThat(savedMeals).isZero();
+
+	}
+
+	@Test
+	void shouldRejectMealWithMissingProduct() throws Exception {
+
+		MockHttpSession session = logInAsAdminA();
+
+		CsrfResponse csrf = getCsrf(session);
+		mockMvc.perform(
+				    post("/api/admin/shops/1/meals")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+							  {
+							        "categoryId": 10,
+							        "name": "Rejected Missing Product Fixture",
+							        "basePrice": 58.00,
+							        "groups": [{
+							              "name": "Choice",
+							              "sortOrder": 10,
+							              "options": [
+							                    {
+							                          "label": "No Drink",
+							                          "supplement": 0.00,
+							                          "sortOrder": 20
+							                    },
+							                    {
+							                          "productId": 999999,
+							                          "supplement": 3.00,
+							                          "sortOrder": 10
+							                    }
+							              ]
+							        }]
+							  }
+							  """)
+			  )
+			  .andExpect(status().isNotFound())
+			  .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+		Long savedMeals = jdbcTemplate.queryForObject(
+			  "SELECT COUNT(*) FROM meal WHERE shop_id = ? AND name = ?",
+			  Long.class,
+			  1L,
+			  "Rejected Missing Product Fixture"
+		);
+
+		assertThat(savedMeals).isZero();
+	}
+
+	@Test
+	void shouldRejectMealWithInvalidNestedOption() throws Exception {
+
+		MockHttpSession session = logInAsAdminA();
+
+		CsrfResponse csrf = getCsrf(session);
+		mockMvc.perform(
+				    post("/api/admin/shops/1/meals")
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+							  {
+							        "categoryId": 10,
+							        "name": "Rejected Invalid Option Fixture",
+							        "basePrice": 58.00,
+							        "groups": [{
+							              "name": "Choice",
+							              "sortOrder": 10,
+							              "options": [
+							                    {
+							                          "label": "No Drink",
+							                          "supplement": 0.00,
+							                          "sortOrder": 20
+							                    },
+							                    {
+							                          "productId": 100,
+							                          "label": "Override",
+							                          "supplement": 3.00,
+							                          "sortOrder": 10
+							                    }
+							              ]
+							        }]
+							  }
+							  """)
+			  )
+			  .andExpect(status().isBadRequest())
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+		Long savedMeals = jdbcTemplate.queryForObject(
+			  "SELECT COUNT(*) FROM meal WHERE shop_id = ? AND name = ?",
+			  Long.class,
+			  1L,
+			  "Rejected Invalid Option Fixture"
+		);
+
+		assertThat(savedMeals).isZero();
+	}
+
+	@Test
+	void shouldRollBackMealWhenSecondOptionInsertFails() {
+
+		CreateMealRequest request = new CreateMealRequest(
+			  10L,
+			  "Meal Rockback Fixture",
+			  new BigDecimal("58.00"),
+			  List.of(new CreateMealGroupRequest(
+				    "Main",
+				    10,
+				    List.of(
+						new CreateMealOptionRequest(
+							  100L, null, BigDecimal.ZERO, 10
+						),
+						new CreateMealOptionRequest(
+							  100L, null, new BigDecimal("-1.00"), 20
+						)
+				    )
+			  ))
+		);
+
+		String countsSql = """
+			            SELECT 
+			                  (SELECT COUNT(*) FROM meal WHERE shop_id = 1) AS meals,
+			                  (SELECT COUNT(*) FROM meal_option_group WHERE shop_id = 1) AS groups_count,
+			                  (SELECT COUNT(*) FROM meal_option WHERE shop_id = 1) AS options
+			  """;
+
+		var before = jdbcTemplate.queryForMap(countsSql);
+
+		assertThatThrownBy(() ->
+			  adminMealService.createMeal("admin_a", 1L, request)
+		)
+			  .hasRootCauseInstanceOf(SQLException.class)
+			  .hasStackTraceContaining("chk_meal_option_supplement");
+
+		assertThat(jdbcTemplate.queryForMap(countsSql)).isEqualTo(before);
 	}
 
 	@Test

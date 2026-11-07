@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 @Table(name = "meal")
 public class Meal {
 
+	private static final String STATUS_UNAVAILABLE = "UNAVAILABLE";
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -52,5 +54,23 @@ public class Meal {
 
 	public String getStatus() {
 		return status;
+	}
+
+	public static Meal createUnavailable(
+		  Long shopId,
+		  Long categoryId,
+		  String name,
+		  BigDecimal basePrice
+	) {
+
+		Meal meal = new Meal();
+
+		meal.shopId = shopId;
+		meal.categoryId = categoryId;
+		meal.name = name;
+		meal.basePrice = basePrice;
+		meal.status = STATUS_UNAVAILABLE;
+
+		return meal;
 	}
 }

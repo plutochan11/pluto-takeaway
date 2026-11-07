@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 @Table(name = "meal_option")
 public class MealOption {
 
+	private static final String STATUS_UNAVAILABLE = "UNAVAILABLE";
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -66,5 +68,27 @@ public class MealOption {
 
 	public Integer getSortOrder() {
 		return sortOrder;
+	}
+
+	public static MealOption createUnavailable(
+		  Long shopId,
+		  Long groupId,
+		  Long productId,
+		  String label,
+		  BigDecimal supplement,
+		  Integer sortOrder
+	) {
+
+		MealOption option = new MealOption();
+
+		option.shopId = shopId;
+		option.groupId = groupId;
+		option.productId = productId;
+		option.label = label;
+		option.supplement = supplement;
+		option.status = STATUS_UNAVAILABLE;
+		option.sortOrder = sortOrder;
+
+		return option;
 	}
 }
