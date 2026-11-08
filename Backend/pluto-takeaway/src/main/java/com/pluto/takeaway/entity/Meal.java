@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 public class Meal {
 
 	private static final String STATUS_UNAVAILABLE = "UNAVAILABLE";
+	private static final String STATUS_AVAILABLE = "AVAILABLE";
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -72,5 +73,10 @@ public class Meal {
 		meal.status = STATUS_UNAVAILABLE;
 
 		return meal;
+	}
+
+	public void publish() {
+
+		this.status = STATUS_AVAILABLE;
 	}
 }

@@ -2,11 +2,13 @@ package com.pluto.takeaway.service;
 
 import com.pluto.takeaway.dto.*;
 import com.pluto.takeaway.entity.*;
+import com.pluto.takeaway.exception.MealNotPublishableException;
 import com.pluto.takeaway.repository.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -138,6 +140,95 @@ public class AdminMealService {
 			  meal.getStatus(),
 			  groupResponses
 		);
+	}
+
+	@Transactional(isolation = Isolation.READ_COMMITTED)
+	public void publishMeal(
+		  String username,
+		  Long shopId,
+		  Long mealId,
+		  PublishMealRequest request
+	) {
+
+		shopAccessService.requireOwnedShop(username, shopId);
+
+		// Find shop by ID and ensure it belongs to the shop
+		Meal meal = mealRepository.findByIdAndShopId(mealId, shopId)
+			  .orElseThrow(() ->
+				    new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+		Set<Long> enabledOptionIds = new HashSet<>(request.enabledOptionIds());
+
+		// Check for duplicate option IDs
+		if (enabledOptionIds.size() != request.enabledOptionIds().size()) {
+			throw new ResponseStatusException(
+				  HttpStatus.BAD_REQUEST,
+				  "Duplicate option IDs"
+			);
+		}
+
+		List<Long> groupIds = mealOptionGroupRepository
+			  .findByShopIdAndMealIdOrderBySortOrderAscIdAsc(shopId, mealId)
+			  .stream()
+			  .map(MealOptionGroup::getId)
+			  .toList();
+
+		if (groupIds.isEmpty()) {
+			throw new MealNotPublishableException("The meal has no option groups");
+		}
+
+		// Find options that belong to the meal group of this shop.
+		List<MealOption> options = mealOptionRepository.findByShopIdAndGroupIdIn(shopId, groupIds);
+
+		List<MealOption> selectedOptions = options.stream()
+			  .filter(option -> enabledOptionIds.contains(option.getId()))
+			  .toList();
+
+		// Check that all selected options belong to this meal
+		if (selectedOptions.size() != enabledOptionIds.size()) {
+			throw new ResponseStatusException(
+				  HttpStatus.BAD_REQUEST,
+				  "All selected options must belong to this meal"
+			);
+		}
+
+		Set<Long> selectedOptionsProductIds = new HashSet<>();
+
+		for (MealOption option : selectedOptions) {
+			if (option.getProductId() != null) {
+				selectedOptionsProductIds.add(option.getProductId());
+			}
+		}
+
+		Set<Long> availableProductIds = new HashSet<>();
+
+		if (!selectedOptionsProductIds.isEmpty()) {
+			for (Product product : productRepository.findAllById(selectedOptionsProductIds)) {
+				if ("AVAILABLE".equals(product.getStatus())) {
+					availableProductIds.add(product.getId());
+				}
+			}
+		}
+
+		if (!availableProductIds.containsAll(selectedOptionsProductIds)) {
+			throw new MealNotPublishableException(
+				  "All selected product-backed options must reference available products");
+		}
+
+		Set<Long> coveredGroupIds = new HashSet<>();
+		for (MealOption option : selectedOptions) {
+			coveredGroupIds.add(option.getGroupId());
+		}
+
+		if (!coveredGroupIds.containsAll(groupIds)) {
+			throw new MealNotPublishableException("Each group needs a selectable option");
+		}
+
+		for (MealOption option : options) {
+			option.setEnabled(enabledOptionIds.contains(option.getId()));
+		}
+
+		meal.publish();
 	}
 
 	private void requireCategoryInShop(Long shopId, Long categoryId) {

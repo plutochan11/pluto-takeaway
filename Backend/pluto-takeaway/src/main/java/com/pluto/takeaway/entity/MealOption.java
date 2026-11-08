@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 public class MealOption {
 
 	private static final String STATUS_UNAVAILABLE = "UNAVAILABLE";
+	private static final String STATUS_AVAILABLE = "AVAILABLE";
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -90,5 +91,10 @@ public class MealOption {
 		option.sortOrder = sortOrder;
 
 		return option;
+	}
+
+	public void setEnabled(boolean enabled) {
+
+		this.status = enabled ? STATUS_AVAILABLE : STATUS_UNAVAILABLE;
 	}
 }

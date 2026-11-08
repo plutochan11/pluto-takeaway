@@ -43,6 +43,8 @@ Product IDs are hypothetical same-shop examples, not current seed IDs. Existing 
 
 Option shape: productId present -> label null/absent. productId null -> label required/nonblank and supplement exactly zero. Product-backed choices display the current Product name; no standalone price is accepted as supplement. Exactly-one selection is a later purchasing rule; groups may offer many options. Unavailable products may be configured but cannot be selected for purchase later.
 
+A product ID can appear only once within a group, even if the options have different supplements. The same product may appear in different groups. Apply the same rule to the resulting group when a group-edit API is added. Non-product choices have no product ID and are outside this rule.
+
 Ignore unknown properties consistently on all three request DTOs, retaining M2's explicit narrow-mapping policy. Body id/shopId/mealId/groupId/status cannot override generated IDs, checked ownership, nesting or initial availability. API money caps do not change DECIMAL(10,2) schema storage. No automatic trimming.
 
 Initial collection limits: at most 20 groups per meal and 50 options per group (at most 1,000 options per create request). Enforce using DTO collection-size constraints before exposing the endpoint. These are adjustable application limits, not database constraints or a general HTTP request-body size limit.
@@ -80,6 +82,20 @@ Invalid input/shape -> 400 VALIDATION_FAILED; missing/invalid CSRF -> 403 CSRF_I
 
 HTTP tests must observe real service commit independently of outer test transactions, inspect DB rows/links and clean up their generated data. Distinguish rejection before writes from rollback after writes. Do not change applied migrations or dev seeds merely for test setup.
 
+## Publish a meal
+
+`PUT /api/admin/shops/{shopId}/meals/{mealId}/publication` accepts JSON and requires a valid session CSRF token and a SHOP_ADMIN who owns the target shop.
+
+```json
+{"enabledOptionIds": [101, 104]}
+```
+
+The list replaces the meal's complete enabled-option selection. It must contain 1 to 1,000 distinct positive option IDs, all belonging to this meal. An ID from another meal or shop is invalid input. Every selected product-backed option must reference a product that is currently AVAILABLE. Selecting even one unavailable product rejects the request, even if another option covers its group. A non-product choice can be selected on its own. Every required group must contain at least one selected option. A meal with no groups cannot be published.
+
+In one transaction, lock the target meal before loading its options, validate the proposed selection, set selected options to AVAILABLE and omitted options to UNAVAILABLE, and set the meal to AVAILABLE. The meal lock serializes concurrent Publish requests for the same meal. Successful publication returns 204. Repeating Publish replaces the selection again, subject to current eligibility checks. A rejected request leaves the prior selection and meal status intact.
+
+Return 404 RESOURCE_NOT_FOUND for a meal absent from the target shop, 400 VALIDATION_FAILED for invalid input, and 409 MEAL_NOT_PUBLISHABLE when any selected product is unavailable or the selection cannot cover every required group. Existing authentication, ownership and CSRF responses apply. Stored publication status records admin intent. Public menu and purchase eligibility must use current product availability, so a later product change can make a published meal unpurchasable.
+
 ## Remaining design work
 
-Verify collection-size boundaries in tests; define calculated unit/line-total limits before pricing implementation. Activation, effective availability, later editing, reads/reconciliation and compatible public menu responses are subsequent slices. Separate editing endpoints may coexist with the atomic complete-create operation.
+Verify collection-size boundaries in tests. Define calculated unit and line-total limits before pricing implementation. Implement publication, effective availability, later editing, reads/reconciliation and compatible public menu responses in subsequent slices.

@@ -44,6 +44,27 @@ class CreateMealRequestValidationTests {
     }
 
     @Test
+    void shouldRejectTheSameProductTwiceInOneGroup() {
+        var request = meal(List.of(group(List.of(
+            option(100L, null, "0.00"),
+            option(100L, null, "3.00")
+        ))));
+
+        assertThat(paths(request)).containsExactly("groups[0].productSelectionUnique");
+    }
+
+    @Test
+    void shouldAllowTheSameProductInDifferentGroups() {
+        var request = meal(List.of(
+            group(List.of(option(100L, null, "0.00"))),
+            new CreateMealGroupRequest("Side", 10,
+                List.of(option(100L, null, "3.00")))
+        ));
+
+        assertThat(paths(request)).isEmpty();
+    }
+
+    @Test
     void shouldRejectInvalidOptionCombinations() {
         var invalidOptions = List.of(
             option(100L, "Coffee", "3.00"),

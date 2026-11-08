@@ -154,3 +154,9 @@ Create a complete Meal with its required groups and options through one POST req
 Initial meal and option statuses remain server-controlled UNAVAILABLE in this creation slice. Explicit activation and later editing are separate operations; creation does not publish the meal. Preserve the accepted HKD 9,999.99 maximum for each base-price/supplement input, nonnegative two-decimal values and zero supplement for non-product choices.
 
 Frontend still handles validation failures and network errors. A committed response lost in transit is not resolved by database atomicity; retry/idempotency or reconciliation is follow-up work. No separate group/option creation endpoints are required for the first complete-create slice. Detailed current contract: [M3 API Contract](./M3%20API%20Contract.md).
+
+## ADR-008 — Publish a meal and its option selection together
+
+Date: 7 November 2026. Status: workflow confirmed by Pluto, implementation pending.
+
+The admin selects the enabled options and publishes the meal in one action. The backend validates membership and requires a selectable choice in every required group. On 8 November 2026, Pluto chose to reject publication if any selected option references an unavailable product, even when another selected option covers the group. One transaction applies the complete selection and sets the meal to AVAILABLE. Failure preserves the prior state. Later product changes affect effective availability without rewriting stored meal or option status. See the [publication contract](./M3%20API%20Contract.md#publish-a-meal) for the HTTP design.

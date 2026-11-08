@@ -22,11 +22,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.UnsupportedEncodingException;
@@ -35,11 +37,9 @@ import java.sql.SQLException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.nullValue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -585,14 +585,7 @@ class PlutoTakeawayApplicationTests {
 	void shouldAllowSecondAdminToReadOwnShop() throws Exception {
 
 		// Get CSRF
-		MvcResult csrfResult = getCsrfResult();
-		CsrfResponse csrfContent = getCsrfContent(csrfResult);
-
-		// Get Session
-		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
-
-		// Log in as admin_b
-		MockHttpSession authenticatedSession = logInAdminBAndReturnSession(mockHttpSession, csrfContent);
+		MockHttpSession authenticatedSession = logInAsAdminB();
 
 		// Access their own admin shop
 		mockMvc.perform(
@@ -609,14 +602,7 @@ class PlutoTakeawayApplicationTests {
 	void shouldRejectAdminBAccessToAnotherShop() throws Exception {
 
 		// Get CSRF
-		MvcResult csrfResult = getCsrfResult();
-		CsrfResponse csrfContent = getCsrfContent(csrfResult);
-
-		// Get Session
-		MockHttpSession mockHttpSession = getMockHttpSession(csrfResult);
-
-		// Log in as admin_b
-		MockHttpSession authenticatedSession = logInAdminBAndReturnSession(mockHttpSession, csrfContent);
+		MockHttpSession authenticatedSession = logInAsAdminB();
 
 		// Access an admin shop that isn't owned by them
 		mockMvc.perform(
@@ -770,14 +756,7 @@ class PlutoTakeawayApplicationTests {
 	)
 	void shouldRejectUpdateToAnotherShop() throws Exception {
 
-		MvcResult csrfResult = getCsrfResult();
-
-		CsrfResponse csrfContent = getCsrfContent(csrfResult);
-
-		MockHttpSession session = getMockHttpSession(csrfResult);
-
-		// Log in as a shop admin who doesn't own the shop to be updated
-		MockHttpSession authenticatedSession = logInAdminBAndReturnSession(session, csrfContent);
+		MockHttpSession authenticatedSession = logInAsAdminB();
 
 		// Get fresh CSRF Token
 		MvcResult freshCsrfResult = mockMvc.perform(
@@ -1409,7 +1388,7 @@ class PlutoTakeawayApplicationTests {
 
 		CreateMealRequest request = new CreateMealRequest(
 			  10L,
-			  "Meal Rockback Fixture",
+			  "Meal Rollback Fixture",
 			  new BigDecimal("58.00"),
 			  List.of(new CreateMealGroupRequest(
 				    "Main",
@@ -1441,6 +1420,148 @@ class PlutoTakeawayApplicationTests {
 			  .hasStackTraceContaining("chk_meal_option_supplement");
 
 		assertThat(jdbcTemplate.queryForMap(countsSql)).isEqualTo(before);
+	}
+
+	@Test
+	@Sql(
+		  scripts = "/test-data/cleanup-publication-meals.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldRejectUnavailableProductEvenWhenAnotherOptionCoversTheGroup() throws Exception {
+
+		// Create a meal directly with the Service
+		MealResponse meal = adminMealService.createMeal("admin_b", 2L,
+			  new CreateMealRequest(20L, "Unavailable Publication Fixture", BigDecimal.TEN,
+				    List.of(new CreateMealGroupRequest("Drink", 10, List.of(
+						new CreateMealOptionRequest(201L, null, BigDecimal.ZERO, 10),
+						new CreateMealOptionRequest(null, "No Drink", BigDecimal.ZERO, 20)
+				    )))
+			  )
+		);
+
+		MealGroupResponse group = meal.groups().getFirst();
+
+		Long optionIdBackedByUnavailableProduct = group.options().get(0).id();
+
+		Long noDrinkOptionId = group.options().get(1).id();
+
+		// Publish the meal with the No Drink option
+		MockHttpSession session = logInAsAdminB();
+
+		CsrfResponse csrf = getCsrf(session);
+
+		mockMvc.perform(
+				    put("/api/admin/shops/{shopId}/meals/{mealId}/publication", 2L, meal.id())
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonMapper.writeValueAsString(
+							  new PublishMealRequest(List.of(noDrinkOptionId))
+						))
+			  )
+			  .andExpect(status().isNoContent())
+			  .andExpect(content().string(""));
+
+		// Verify the publication will be rejected due to an unavailable product
+		mockMvc.perform(
+				    put("/api/admin/shops/{shopId}/meals/{mealId}/publication", 2L, meal.id())
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonMapper.writeValueAsString(
+							  new PublishMealRequest(List.of(optionIdBackedByUnavailableProduct, noDrinkOptionId))
+						))
+			  )
+			  .andExpect(status().isConflict())
+			  .andExpect(jsonPath("$.code").value("MEAL_NOT_PUBLISHABLE"));
+
+
+		// Verify the enabled meal stays intact
+		assertThat(jdbcTemplate.queryForObject(
+			  "SELECT status FROM meal WHERE id = ?", String.class, meal.id()
+		)).isEqualTo("AVAILABLE");
+		assertThat(jdbcTemplate.queryForList(
+			  "SELECT id FROM meal_option WHERE group_id = ? AND status = 'AVAILABLE'",
+			  Long.class, group.id()
+		)).containsExactly(noDrinkOptionId);
+	}
+
+	@Test
+	@Sql(
+		  scripts = "/test-data/cleanup-publication-meals.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldReplaceEnabledOptionsWhenRepublishing() throws Exception {
+
+		// Create a meal directly with the Service
+		MealResponse meal = adminMealService.createMeal("admin_b", 2L,
+			  new CreateMealRequest(20L, "Replacement Publication Fixture", BigDecimal.TEN,
+				    List.of(new CreateMealGroupRequest("Drink", 10, List.of(
+						new CreateMealOptionRequest(200L, null, BigDecimal.ZERO, 10),
+						new CreateMealOptionRequest(null, "No Drink", BigDecimal.ZERO, 20)
+				    )))
+			  )
+		);
+
+		MealGroupResponse group = meal.groups().getFirst();
+
+		Long coffeeOptionId = group.options().getFirst().id();
+		Long noDrinkOptionId = group.options().get(1).id();
+
+		MockHttpSession session = logInAsAdminB();
+
+		CsrfResponse csrf = getCsrf(session);
+
+		// Enable only the No Drink option
+		mockMvc.perform(
+				    put("/api/admin/shops/{shopId}/meals/{mealId}/publication", 2L, meal.id())
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonMapper.writeValueAsString(
+							  new PublishMealRequest(List.of(noDrinkOptionId))
+						))
+			  )
+			  .andExpect(status().isNoContent())
+			  .andExpect(content().string(""));
+
+		// Should only have No Drink enabled
+		assertThat(jdbcTemplate.queryForList(
+			  "SELECT id FROM meal_option WHERE group_id = ? AND STATUS = 'AVAILABLE'",
+			  Long.class,
+			  group.id()
+		)).containsExactly(noDrinkOptionId);
+
+		// Enable only the coffee option
+		mockMvc.perform(
+				    put("/api/admin/shops/{shopId}/meals/{mealId}/publication", 2L, meal.id())
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonMapper.writeValueAsString(
+							  new PublishMealRequest(List.of(coffeeOptionId))
+						))
+			  )
+			  .andExpect(status().isNoContent())
+			  .andExpect(content().string(""));
+
+		// Should only have coffee enabled
+		assertThat(jdbcTemplate.queryForList(
+			  "SELECT id FROM meal_option WHERE group_id = ? AND STATUS = 'AVAILABLE'",
+			  Long.class,
+			  group.id()
+		)).containsExactly(coffeeOptionId);
+	}
+
+	private MockHttpSession logInAsAdminB() throws Exception {
+
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		return logInAdminBAndReturnSession(session, csrfContent);
 	}
 
 	@Test

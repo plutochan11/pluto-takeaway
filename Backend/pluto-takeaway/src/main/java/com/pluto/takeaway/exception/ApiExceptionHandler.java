@@ -48,35 +48,39 @@ public class ApiExceptionHandler {
 
 		int status = exception.getStatusCode().value();
 
-		ApiErrorResponse body = null;
-
-		switch (status) {
-			case 401:
-				body = new ApiErrorResponse(
-					  "AUTHENTICATION_REQUIRED",
-					  "Authentication is required"
-				);
-				break;
-
-			case 403:
-				body = new ApiErrorResponse(
-					  "ACCESS_DENIED",
-					  "Access is denied"
-				);
-				break;
-
-			case 404:
-				body = new ApiErrorResponse(
-					  "RESOURCE_NOT_FOUND",
-					  "Resource not found"
-				);
-				break;
-
-			default:
-				throw exception;
-		}
+		ApiErrorResponse body = switch (status) {
+			case 400 -> new ApiErrorResponse(
+				  "VALIDATION_FAILED",
+				  "Request input is invalid"
+			);
+			case 401 -> new ApiErrorResponse(
+				  "AUTHENTICATION_REQUIRED",
+				  "Authentication is required"
+			);
+			case 403 -> new ApiErrorResponse(
+				  "ACCESS_DENIED",
+				  "Access is denied"
+			);
+			case 404 -> new ApiErrorResponse(
+				  "RESOURCE_NOT_FOUND",
+				  "Resource not found"
+			);
+			default -> throw exception;
+		};
 
 		return ResponseEntity.status(status)
 			  .body(body);
+	}
+
+	@ExceptionHandler(MealNotPublishableException.class)
+	public ResponseEntity<ApiErrorResponse> handleMealNotPublishable(
+		  MealNotPublishableException exception
+	) {
+
+		return ResponseEntity.status(exception.getStatusCode())
+			  .body(new ApiErrorResponse(
+				    "MEAL_NOT_PUBLISHABLE",
+				    exception.getReason()
+			  ));
 	}
 }

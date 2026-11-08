@@ -2,16 +2,14 @@ package com.pluto.takeaway.controller;
 
 import com.pluto.takeaway.dto.CreateMealRequest;
 import com.pluto.takeaway.dto.MealResponse;
+import com.pluto.takeaway.dto.PublishMealRequest;
 import com.pluto.takeaway.service.AdminMealService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class AdminMealController {
@@ -41,5 +39,26 @@ public class AdminMealController {
 		return ResponseEntity
 			  .status(HttpStatus.CREATED)
 			  .body(response);
+	}
+
+	@PutMapping(
+		  value = "/api/admin/shops/{shopId}/meals/{mealId}/publication",
+		  consumes = MediaType.APPLICATION_JSON_VALUE
+	)
+	public ResponseEntity<Void> publishMeal(
+		  @PathVariable("shopId") Long shopId,
+		  @PathVariable("mealId") Long mealId,
+		  @RequestBody @Valid PublishMealRequest request,
+		  Authentication authentication
+	) {
+
+		adminMealService.publishMeal(
+			  authentication.getName(),
+			  shopId,
+			  mealId,
+			  request
+		);
+
+		return ResponseEntity.noContent().build();
 	}
 }
