@@ -12,6 +12,6 @@ import java.util.List;
 public record PublishMealRequest(
 	  @NotEmpty
 	  @Size(max = 1000)
-	  List<@NotNull @Positive Long> enabledOptionIds
+	  List<@NotNull @Positive Long> optionIdsToEnable
 ) {
 }

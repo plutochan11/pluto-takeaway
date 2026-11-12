@@ -1553,15 +1553,76 @@ class PlutoTakeawayApplicationTests {
 		)).containsExactly(coffeeOptionId);
 	}
 
-	private MockHttpSession logInAsAdminB() throws Exception {
+	@Test
+	@Sql(
+		  scripts = "/test-data/cleanup-public-menu-meal.sql",
+		  executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD
+	)
+	void shouldReflectProductAvailabilityInPublicMealMenu() throws Exception {
 
-		MvcResult csrfResult = getCsrfResult();
+		// Create a meal directly with the Service
+		MealResponse meal = adminMealService.createMeal("admin_b", 2L,
+			  new CreateMealRequest(20L, "Public Meal Availability Fixture", BigDecimal.TEN,
+				    List.of(new CreateMealGroupRequest("Drink", 10, List.of(
+						new CreateMealOptionRequest(200L, null, BigDecimal.ZERO, 10),
+						new CreateMealOptionRequest(null, "No Drink", BigDecimal.ZERO, 20)
+				    )))
+			  )
+		);
 
-		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+		Long coffeeOptionId = meal.groups().getFirst().options().getFirst().id();
 
-		MockHttpSession session = getMockHttpSession(csrfResult);
+		// Try to read the menu
+		// Should get nothing as the meal haven't been published
+		mockMvc.perform(get("/api/shops/2/menu"))
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath("$.categories[0].meals").isEmpty());
 
-		return logInAdminBAndReturnSession(session, csrfContent);
+		MockHttpSession session = logInAsAdminB();
+
+		CsrfResponse csrf = getCsrf(session);
+
+		// Publish the meal and enable only the Coffee option
+		mockMvc.perform(
+				    put("/api/admin/shops/{shopId}/meals/{mealId}/publication", 2L, meal.id())
+						.session(session)
+						.header(csrf.headerName(), csrf.token())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonMapper.writeValueAsString(
+							  new PublishMealRequest(List.of(coffeeOptionId))
+						))
+			  )
+			  .andExpect(status().isNoContent())
+			  .andExpect(content().string(""));
+
+		String mealPath = "$.categories[0].meals[0]";
+		String optionPath = mealPath + ".groups[0].options";
+
+		// Read the menu
+		mockMvc.perform(get("/api/shops/2/menu"))
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath(mealPath + ".name").value("Public Meal Availability Fixture"))
+			  .andExpect(jsonPath(mealPath + ".configurable").value(true))
+			  .andExpect(jsonPath(optionPath + ".length()").value(1))
+			  .andExpect(jsonPath(optionPath + "[0].name").value("Coffee"))
+			  .andExpect(jsonPath(optionPath + "[0].selectable").value(true));
+
+		// Disable the option directly for simplicity
+		// And verify 1 row will be affected
+		assertThat(jdbcTemplate.update(
+			  "UPDATE product SET status = ? WHERE shop_id = ? AND id = ?",
+			  "UNAVAILABLE", 2L, 200L
+		)).isEqualTo(1);
+
+		// Read the menu again
+		// And the coffee option should be unselectable now
+		mockMvc.perform(get("/api/shops/2/menu"))
+			  .andExpect(status().isOk())
+			  .andExpect(jsonPath(mealPath + ".name").value("Public Meal Availability Fixture"))
+			  .andExpect(jsonPath(mealPath + ".configurable").value(false))
+			  .andExpect(jsonPath(optionPath + ".length()").value(1))
+			  .andExpect(jsonPath(optionPath + "[0].name").value("Coffee"))
+			  .andExpect(jsonPath(optionPath + "[0].selectable").value(false));
 	}
 
 	@Test
@@ -1674,6 +1735,17 @@ class PlutoTakeawayApplicationTests {
 			  .andExpect(status().isOk())
 			  .andReturn();
 		return getCsrfContent(freshCsrfResult);
+	}
+
+	private MockHttpSession logInAsAdminB() throws Exception {
+
+		MvcResult csrfResult = getCsrfResult();
+
+		CsrfResponse csrfContent = getCsrfContent(csrfResult);
+
+		MockHttpSession session = getMockHttpSession(csrfResult);
+
+		return logInAdminBAndReturnSession(session, csrfContent);
 	}
 
 }

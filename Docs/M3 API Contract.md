@@ -96,6 +96,15 @@ In one transaction, lock the target meal before loading its options, validate th
 
 Return 404 RESOURCE_NOT_FOUND for a meal absent from the target shop, 400 VALIDATION_FAILED for invalid input, and 409 MEAL_NOT_PUBLISHABLE when any selected product is unavailable or the selection cannot cover every required group. Existing authentication, ownership and CSRF responses apply. Stored publication status records admin intent. Public menu and purchase eligibility must use current product availability, so a later product change can make a published meal unpurchasable.
 
+## Public menu meals
+
+Extend `GET /api/shops/{shopId}/menu` with a `meals` array on each category. Keep the existing shop, category and product fields. Return an empty array for categories without published meals.
+
+- Include meals whose saved status is AVAILABLE. Show only options enabled by the admin. An enabled option backed by a currently unavailable product remains visible with `selectable: false`.
+- Include all required groups, even when a group has no selectable options. A published meal has `configurable: true` only when it has at least one group and every group has a selectable option. Keep published meals visible when this flag is false. The shop's separate status continues to indicate whether it is open.
+- A public meal exposes `id`, `name`, `basePrice`, `configurable` and `groups`. Each group exposes `id`, `name` and `options`. Each option exposes `id`, `name`, `supplement` and `selectable`. Use the current product name for a product-backed option and the stored label for a non-product option.
+- Order meals by ID and groups and options by sort order, then ID. Load the hierarchy in batches and reuse the products already loaded for the menu.
+
 ## Remaining design work
 
 Verify collection-size boundaries in tests. Define calculated unit and line-total limits before pricing implementation. Implement publication, effective availability, later editing, reads/reconciliation and compatible public menu responses in subsequent slices.

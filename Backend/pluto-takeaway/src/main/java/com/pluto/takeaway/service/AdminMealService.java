@@ -4,8 +4,6 @@ import com.pluto.takeaway.dto.*;
 import com.pluto.takeaway.entity.*;
 import com.pluto.takeaway.exception.MealNotPublishableException;
 import com.pluto.takeaway.repository.*;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -152,15 +150,18 @@ public class AdminMealService {
 
 		shopAccessService.requireOwnedShop(username, shopId);
 
-		// Find shop by ID and ensure it belongs to the shop
+		// Find the meal by its ID and shop ID
+		// Return 404 if not found
 		Meal meal = mealRepository.findByIdAndShopId(mealId, shopId)
 			  .orElseThrow(() ->
 				    new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-		Set<Long> enabledOptionIds = new HashSet<>(request.enabledOptionIds());
+		// Use Set to filter duplicate option IDs
+		Set<Long> optionIdsToEnable = new HashSet<>(request.optionIdsToEnable());
 
-		// Check for duplicate option IDs
-		if (enabledOptionIds.size() != request.enabledOptionIds().size()) {
+		// Check option duplicates
+		// Return 400 if there have
+		if (optionIdsToEnable.size() != request.optionIdsToEnable().size()) {
 			throw new ResponseStatusException(
 				  HttpStatus.BAD_REQUEST,
 				  "Duplicate option IDs"
@@ -173,59 +174,66 @@ public class AdminMealService {
 			  .map(MealOptionGroup::getId)
 			  .toList();
 
+		// Check if there are groups associated with the meal
 		if (groupIds.isEmpty()) {
 			throw new MealNotPublishableException("The meal has no option groups");
 		}
 
-		// Find options that belong to the meal group of this shop.
 		List<MealOption> options = mealOptionRepository.findByShopIdAndGroupIdIn(shopId, groupIds);
 
-		List<MealOption> selectedOptions = options.stream()
-			  .filter(option -> enabledOptionIds.contains(option.getId()))
+		List<MealOption> optionsToEnable = options.stream()
+			  .filter(option -> optionIdsToEnable.contains(option.getId()))
 			  .toList();
 
-		// Check that all selected options belong to this meal
-		if (selectedOptions.size() != enabledOptionIds.size()) {
+		// Check if options to be enabled belong to this meal
+		if (optionsToEnable.size() != optionIdsToEnable.size()) {
 			throw new ResponseStatusException(
 				  HttpStatus.BAD_REQUEST,
 				  "All selected options must belong to this meal"
 			);
 		}
 
-		Set<Long> selectedOptionsProductIds = new HashSet<>();
+		Set<Long> productIdsOfOptionsToBeEnabled = new HashSet<>();
 
-		for (MealOption option : selectedOptions) {
+		// Collect product IDs that are associated with the options
+		for (MealOption option : optionsToEnable) {
 			if (option.getProductId() != null) {
-				selectedOptionsProductIds.add(option.getProductId());
+				productIdsOfOptionsToBeEnabled.add(option.getProductId());
 			}
 		}
 
 		Set<Long> availableProductIds = new HashSet<>();
 
-		if (!selectedOptionsProductIds.isEmpty()) {
-			for (Product product : productRepository.findAllById(selectedOptionsProductIds)) {
+		// Record available product IDs which are associated with the options
+		if (!productIdsOfOptionsToBeEnabled.isEmpty()) {
+			for (Product product : productRepository.findAllById(productIdsOfOptionsToBeEnabled)) {
 				if ("AVAILABLE".equals(product.getStatus())) {
 					availableProductIds.add(product.getId());
 				}
 			}
 		}
 
-		if (!availableProductIds.containsAll(selectedOptionsProductIds)) {
+		// Check if all associated products are available
+		if (!availableProductIds.containsAll(productIdsOfOptionsToBeEnabled)) {
 			throw new MealNotPublishableException(
 				  "All selected product-backed options must reference available products");
 		}
 
+		// Record if every group has at least one selectable option
 		Set<Long> coveredGroupIds = new HashSet<>();
-		for (MealOption option : selectedOptions) {
+
+		for (MealOption option : optionsToEnable) {
 			coveredGroupIds.add(option.getGroupId());
 		}
 
+		// Check if all groups have at lease one selectable
 		if (!coveredGroupIds.containsAll(groupIds)) {
 			throw new MealNotPublishableException("Each group needs a selectable option");
 		}
 
+		// Enable options that are requested to enable and disable those aren't
 		for (MealOption option : options) {
-			option.setEnabled(enabledOptionIds.contains(option.getId()));
+			option.setEnabled(optionIdsToEnable.contains(option.getId()));
 		}
 
 		meal.publish();

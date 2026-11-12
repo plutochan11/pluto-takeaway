@@ -14,4 +14,6 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Meal> findByIdAndShopId(Long id, Long shopId);
+
+	List<Meal> findByShopIdAndStatusOrderByIdAsc(Long shopId, String status);
 }
