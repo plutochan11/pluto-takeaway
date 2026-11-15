@@ -52,4 +52,9 @@ public class Product {
 	public String getStatus() {
 		return status;
 	}
+
+	public void setAvailable(boolean available) {
+
+		this.status = available ? "AVAILABLE" : "UNAVAILABLE";
+	}
 }

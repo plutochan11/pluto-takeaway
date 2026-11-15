@@ -1607,12 +1607,17 @@ class PlutoTakeawayApplicationTests {
 			  .andExpect(jsonPath(optionPath + "[0].name").value("Coffee"))
 			  .andExpect(jsonPath(optionPath + "[0].selectable").value(true));
 
-		// Disable the option directly for simplicity
-		// And verify 1 row will be affected
-		assertThat(jdbcTemplate.update(
-			  "UPDATE product SET status = ? WHERE shop_id = ? AND id = ?",
-			  "UNAVAILABLE", 2L, 200L
-		)).isEqualTo(1);
+		mockMvc.perform(
+			    patch("/api/admin/shops/2/products/200/availability")
+				    .session(session)
+				    .header(csrf.headerName(), csrf.token())
+				    .contentType(MediaType.APPLICATION_JSON)
+				    .content("{\"status\":\"UNAVAILABLE\"}")
+		  )
+		  .andExpect(status().isOk())
+		  .andExpect(jsonPath("$.id").value(200))
+		  .andExpect(jsonPath("$.name").value("Coffee"))
+		  .andExpect(jsonPath("$.status").value("UNAVAILABLE"));
 
 		// Read the menu again
 		// And the coffee option should be unselectable now
@@ -1623,6 +1628,68 @@ class PlutoTakeawayApplicationTests {
 			  .andExpect(jsonPath(optionPath + ".length()").value(1))
 			  .andExpect(jsonPath(optionPath + "[0].name").value("Coffee"))
 			  .andExpect(jsonPath(optionPath + "[0].selectable").value(false));
+	}
+
+	@Test
+	void shouldRejectProductAvailabilityUpdateForAnotherShop() throws Exception {
+		MockHttpSession session = logInAsAdminA();
+		CsrfResponse csrf = getCsrf(session);
+
+		mockMvc.perform(
+			    patch("/api/admin/shops/2/products/200/availability")
+				    .session(session)
+				    .header(csrf.headerName(), csrf.token())
+				    .contentType(MediaType.APPLICATION_JSON)
+				    .content("{\"status\":\"UNAVAILABLE\"}")
+		  )
+		  .andExpect(status().isForbidden())
+		  .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+		assertThat(jdbcTemplate.queryForObject(
+			  "SELECT status FROM product WHERE id = 200", String.class
+		)).isEqualTo("AVAILABLE");
+	}
+
+	@Test
+	void shouldRejectProductFromOutsideTheRequestedShop() throws Exception {
+		MockHttpSession session = logInAsAdminA();
+		CsrfResponse csrf = getCsrf(session);
+
+		mockMvc.perform(
+			    patch("/api/admin/shops/1/products/200/availability")
+				    .session(session)
+				    .header(csrf.headerName(), csrf.token())
+				    .contentType(MediaType.APPLICATION_JSON)
+				    .content("{\"status\":\"UNAVAILABLE\"}")
+		  )
+		  .andExpect(status().isNotFound())
+		  .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+		assertThat(jdbcTemplate.queryForObject(
+			  "SELECT status FROM product WHERE id = 200", String.class
+		)).isEqualTo("AVAILABLE");
+	}
+
+	@Test
+	void shouldRejectInvalidProductAvailabilityStatus() throws Exception {
+		MockHttpSession session = logInAsAdminB();
+		CsrfResponse csrf = getCsrf(session);
+
+		for (String body : List.of("{}", "{\"status\":\"SOLD_OUT\"}")) {
+			mockMvc.perform(
+				    patch("/api/admin/shops/2/products/200/availability")
+					    .session(session)
+					    .header(csrf.headerName(), csrf.token())
+					    .contentType(MediaType.APPLICATION_JSON)
+					    .content(body)
+			  )
+			  .andExpect(status().isBadRequest())
+			  .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+		}
+
+		assertThat(jdbcTemplate.queryForObject(
+			  "SELECT status FROM product WHERE id = 200", String.class
+		)).isEqualTo("AVAILABLE");
 	}
 
 	@Test
